@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Astra - Create Account</title>
+    <link rel="stylesheet" href="../css/signup.css" />
+  </head>
+  <body>
+    <main class="login-page">
+      <section class="login-box" aria-labelledby="signup-title">
+        <header class="login-header">
+          <div class="kicker mono">Astra - Never Lose the Thread.</div>
+          <h1 id="signup-title">Create your account.</h1>
+          <p>Start turning your meetings into clear, useful records.</p>
+        </header>
+
+        <form class="login-form" method="post">
+          <div class="input-box">
+            <label for="name">Full name</label>
+            <input class="input-field" type="text" id="name" name="name" autocomplete="name" placeholder="Your name" required />
+          </div>
+
+          <div class="input-box">
+            <label for="email">Email address</label>
+            <input class="input-field" type="email" id="email" name="email" autocomplete="email" placeholder="you@example.com" required />
+          </div>
+
+          <div class="input-box">
+            <label for="password">Password</label>
+            <input class="input-field" type="password" id="password" name="password" autocomplete="new-password" minlength="6" placeholder="Create a password" required />
+          </div>
+
+          <label class="terms-option" for="terms">
+            <input type="checkbox" id="terms" name="terms" required />
+            <span>I agree to the terms and privacy policy.</span>
+          </label>
+
+          <button class="input-submit" type="submit">Create account</button>
+        </form>
+
+        <p class="sign-up">
+          Already have an account?
+          <a href="login.html">Sign in</a>
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

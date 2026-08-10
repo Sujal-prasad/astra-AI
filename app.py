@@ -12,7 +12,7 @@ from core.rag_engine import ask_question
 from main import run_pipeline
 
 st.set_page_config(
-    page_title="Astra — Meeting Record",
+    page_title="Astra — Never Lose the Thread.",
     page_icon="A",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -345,7 +345,7 @@ def render_chat() -> None:
 
 st.markdown(
     '<div class="masthead">'
-    '<div class="kicker mono">Astra — Meeting Record</div>'
+    '<div class="kicker mono">Astra — Never Lose the Thread.</div>'
     "<h1>Read the meeting in two minutes.</h1>"
     "<p>Bring a recording or a YouTube link. Astra writes the transcript, pulls out the decisions "
     "and the action items, and then answers whatever you still need to know.</p>"
