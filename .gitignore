@@ -1,0 +1,61 @@
+# Environment variables and secrets
+.env
+.env.*
+.ENV
+.ENV.*
+!.env.example
+!.env.example.*
+
+# Python virtual environments
+venv/
+.venv/
+env/
+
+# Python cache and build files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+
+# Packaging artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Local generated data and user uploads
+downloads/*
+!downloads/.gitkeep
+
+# Local databases, vector indexes, and model/cache files
+*.db
+*.sqlite
+*.sqlite3
+.chroma/
+chroma_db/
+models/
+.cache/
+
+# Streamlit secrets
+.streamlit/secrets.toml
+
+# Jupyter and editor files
+.ipynb_checkpoints/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
