@@ -6,10 +6,13 @@ from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 
+
 load_dotenv()
+
 
 from core.rag_engine import ask_question
 from main import run_pipeline
+from utils.superbase_client import supabase
 
 st.set_page_config(
     page_title="Astra — Never Lose the Thread.",
@@ -38,6 +41,11 @@ STYLES = """
 
 html, body, [data-testid="stAppViewContainer"], .stApp {
     background: var(--paper);
+    background-image:
+        radial-gradient(ellipse 52% 18% at 12% 9%, rgba(255, 255, 255, 0.66), transparent 72%),
+        radial-gradient(ellipse 58% 22% at 88% 88%, rgba(255, 255, 255, 0.58), transparent 72%),
+        radial-gradient(ellipse 35% 13% at 76% 17%, rgba(255, 255, 255, 0.35), transparent 70%),
+        radial-gradient(ellipse at 86% 4%, rgba(124, 47, 57, 0.035), transparent 42%);
     color: var(--ink);
     font-family: 'Instrument Sans', system-ui, -apple-system, sans-serif;
 }
@@ -341,6 +349,52 @@ def render_chat() -> None:
                 answer = ask_question(st.session_state.result["rag_chain"], question)
             st.markdown(answer)
         messages.append({"role": "assistant", "content": answer})
+
+
+def restore_oauth_session() -> None:
+    code = st.query_params.get("code")
+    if not code or st.session_state.get("user"):
+        return
+
+    try:
+        session = supabase.auth.exchange_code_for_session(code)
+    except Exception as error:
+        st.error(f"Google sign-in could not be completed: {error}")
+        st.query_params.clear()
+        return
+
+    if session and session.user:
+        st.session_state.user = session.user
+        st.session_state.session = session
+
+    st.query_params.clear()
+    st.rerun()
+
+
+def show_login() -> None:
+    st.markdown(
+        '<div class="empty"><div class="mono">Astra access</div>'
+        "<h3>Sign in to your meeting workspace.</h3>"
+        "<p>Use your Google account to transcribe, review, and revisit meetings.</p></div>",
+        unsafe_allow_html=True,
+    )
+
+    if st.button("Continue with Google", type="primary", use_container_width=True):
+        response = supabase.auth.sign_in_with_oauth(
+            {
+                "provider": "google",
+                "options": {"redirect_to": "http://localhost:8501"},
+            }
+        )
+        st.markdown(f"[Continue with Google]({response.url})")
+        st.stop()
+
+    st.stop()
+
+
+restore_oauth_session()
+if "user" not in st.session_state:
+    show_login()
 
 
 st.markdown(
