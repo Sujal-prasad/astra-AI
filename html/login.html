@@ -28,7 +28,7 @@
 
             </div>
 
-            <form class="login-form">
+            <form class="login-form" id="login-form">
 
                 <div class="input-box">
 
@@ -83,13 +83,15 @@
 
             </form>
 
+            <p class="auth-status" id="auth-status" role="status"></p>
+
             <div class="middle-text">
                 <span></span>
                 <p class="or-text mono">OR</p>
                 <span></span>
             </div>
 
-            <button class="input-google" type="button">
+            <button class="input-google" id="google-sign-in" type="button">
 
                 <img
                     src="../assets/google sign in.png"
@@ -114,5 +116,54 @@
     </main>
 
 </body>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../auth-config.js"></script>
+<script>
+    const supabaseClient = window.supabase.createClient(
+        window.ASTRA_SUPABASE_URL,
+        window.ASTRA_SUPABASE_ANON_KEY
+    );
+    const appUrl = "http://localhost:8501";
+    const authPageUrl = window.location.href.split("?")[0].split("#")[0];
+    const statusMessage = document.getElementById("auth-status");
+
+    function setStatus(message) {
+        statusMessage.textContent = message;
+    }
+
+    async function enterAstra(session) {
+        const params = new URLSearchParams({
+            access_token: session.access_token,
+            refresh_token: session.refresh_token
+        });
+        window.location.href = `${appUrl}/?${params.toString()}`;
+    }
+
+    async function continueWithGoogle() {
+        setStatus("Opening Google sign in...");
+        const { error } = await supabaseClient.auth.signInWithOAuth({
+            provider: "google",
+            options: { redirectTo: authPageUrl }
+        });
+        if (error) setStatus(error.message);
+    }
+
+    document.getElementById("google-sign-in").addEventListener("click", continueWithGoogle);
+
+    document.getElementById("login-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        setStatus("Signing in...");
+        const { data, error } = await supabaseClient.auth.signInWithPassword({
+            email: document.getElementById("email").value,
+            password: document.getElementById("password").value
+        });
+        if (error) return setStatus(error.message);
+        await enterAstra(data.session);
+    });
+
+    supabaseClient.auth.getSession().then(({ data }) => {
+        if (data.session) enterAstra(data.session);
+    });
+</script>
 </html>
 

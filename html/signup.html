@@ -15,7 +15,7 @@
           <p>Start turning your meetings into clear, useful records.</p>
         </header>
 
-        <form class="login-form" method="post">
+        <form class="login-form" id="signup-form" method="post">
           <div class="input-box">
             <label for="name">Full name</label>
             <input class="input-field" type="text" id="name" name="name" autocomplete="name" placeholder="Your name" required />
@@ -39,6 +39,19 @@
           <button class="input-submit" type="submit">Create account</button>
         </form>
 
+        <p class="auth-status" id="auth-status" role="status"></p>
+
+        <div class="middle-text">
+          <span></span>
+          <p class="or-text mono">OR</p>
+          <span></span>
+        </div>
+
+        <button class="input-google" id="google-sign-up" type="button">
+          <img src="../assets/google sign in.png" alt="" />
+          <span>Sign up with Google</span>
+        </button>
+
         <p class="sign-up">
           Already have an account?
           <a href="login.html">Sign in</a>
@@ -46,4 +59,53 @@
       </section>
     </main>
   </body>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../auth-config.js"></script>
+  <script>
+    const supabaseClient = window.supabase.createClient(
+      window.ASTRA_SUPABASE_URL,
+      window.ASTRA_SUPABASE_ANON_KEY
+    );
+    const appUrl = "http://localhost:8501";
+    const authPageUrl = window.location.href.split("?")[0].split("#")[0];
+    const statusMessage = document.getElementById("auth-status");
+
+    function setStatus(message) {
+      statusMessage.textContent = message;
+    }
+
+    async function enterAstra(session) {
+      const params = new URLSearchParams({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token
+      });
+      window.location.href = `${appUrl}/?${params.toString()}`;
+    }
+
+    document.getElementById("google-sign-up").addEventListener("click", async () => {
+      setStatus("Opening Google sign up...");
+      const { error } = await supabaseClient.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: authPageUrl }
+      });
+      if (error) setStatus(error.message);
+    });
+
+    document.getElementById("signup-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      setStatus("Creating account...");
+      const { data, error } = await supabaseClient.auth.signUp({
+        email: document.getElementById("email").value,
+        password: document.getElementById("password").value,
+        options: { data: { full_name: document.getElementById("name").value } }
+      });
+      if (error) return setStatus(error.message);
+      if (data.session) return enterAstra(data.session);
+      setStatus("Check your email to confirm your account, then sign in.");
+    });
+
+    supabaseClient.auth.getSession().then(({ data }) => {
+      if (data.session) enterAstra(data.session);
+    });
+  </script>
 </html>

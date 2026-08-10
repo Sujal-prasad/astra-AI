@@ -4,10 +4,11 @@ import uuid
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 from dotenv import load_dotenv
 
 
-load_dotenv()
+load_dotenv(".ENV")
 
 
 from core.rag_engine import ask_question
@@ -258,6 +259,42 @@ def reset_workspace() -> None:
     st.rerun()
 
 
+def restore_auth_session() -> None:
+    access_token = st.query_params.get("access_token")
+    refresh_token = st.query_params.get("refresh_token")
+    if not access_token or not refresh_token or st.session_state.get("user"):
+        return
+
+    try:
+        auth_response = supabase.auth.set_session(access_token, refresh_token)
+    except Exception as error:
+        st.error(f"Authentication could not be completed: {error}")
+        st.query_params.clear()
+        return
+
+    if auth_response.user:
+        st.session_state.user = auth_response.user
+        st.session_state.session = auth_response.session
+        st.query_params.clear()
+        st.rerun()
+
+
+def require_authentication() -> None:
+    restore_auth_session()
+    if st.session_state.get("user"):
+        return
+
+    components.html(
+        """
+        <script>
+            window.top.location.replace("http://localhost:8001/html/login.html");
+        </script>
+        """,
+        height=0,
+    )
+    st.stop()
+
+
 def save_upload(uploaded_file) -> str:
     upload_dir = Path("downloads")
     upload_dir.mkdir(exist_ok=True)
@@ -351,50 +388,7 @@ def render_chat() -> None:
         messages.append({"role": "assistant", "content": answer})
 
 
-def restore_oauth_session() -> None:
-    code = st.query_params.get("code")
-    if not code or st.session_state.get("user"):
-        return
-
-    try:
-        session = supabase.auth.exchange_code_for_session(code)
-    except Exception as error:
-        st.error(f"Google sign-in could not be completed: {error}")
-        st.query_params.clear()
-        return
-
-    if session and session.user:
-        st.session_state.user = session.user
-        st.session_state.session = session
-
-    st.query_params.clear()
-    st.rerun()
-
-
-def show_login() -> None:
-    st.markdown(
-        '<div class="empty"><div class="mono">Astra access</div>'
-        "<h3>Sign in to your meeting workspace.</h3>"
-        "<p>Use your Google account to transcribe, review, and revisit meetings.</p></div>",
-        unsafe_allow_html=True,
-    )
-
-    if st.button("Continue with Google", type="primary", use_container_width=True):
-        response = supabase.auth.sign_in_with_oauth(
-            {
-                "provider": "google",
-                "options": {"redirect_to": "http://localhost:8501"},
-            }
-        )
-        st.markdown(f"[Continue with Google]({response.url})")
-        st.stop()
-
-    st.stop()
-
-
-restore_oauth_session()
-if "user" not in st.session_state:
-    show_login()
+require_authentication()
 
 
 st.markdown(
@@ -408,7 +402,22 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+@st.dialog("Sign out of Astra?")
+def confirm_sign_out():
+    st.write("Your current workspace session will be closed.")
+    if st.button("Sign out", type="primary", use_container_width=True):
+        supabase.auth.sign_out()
+        st.session_state.clear()
+        st.success("You have been signed out.")
+        st.link_button("Return to login", "http://localhost:8001/html/login.html", use_container_width=True)
+    if st.button("Cancel", use_container_width=True):
+        st.rerun()
+
+
 with st.sidebar:
+    if st.button("Sign out", use_container_width=True):
+        confirm_sign_out()
+
     st.markdown('<div class="mono">Step 01</div>', unsafe_allow_html=True)
     st.markdown("## New meeting")
     source_mode = st.radio("Source", ["Upload file", "YouTube URL"], horizontal=True)

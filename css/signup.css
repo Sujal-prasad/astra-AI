@@ -159,6 +159,14 @@ body {
     background: #fff;
 }
 
+.auth-status {
+    min-height: 1.2rem;
+    margin-top: 0.75rem;
+    color: var(--signal);
+    font-size: 0.8rem;
+    text-align: center;
+}
+
 .input-submit {
     width: 100%;
     height: 48px;
