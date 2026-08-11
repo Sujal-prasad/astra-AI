@@ -48,33 +48,59 @@ boot_placeholder.markdown(
         background: #e9ebee;
     }}
     .astra-boot-card {{ width: min(420px, calc(100% - 3rem)); }}
-    .astra-boot-bar {{ height: 2px; background: #7c2f39; margin-bottom: 1.4rem; }}
+    .astra-boot-rule {{ height: 2px; background: #7c2f39; }}
+    .astra-boot-track {{
+        position: relative; height: 38px; margin-top: 1.2rem; overflow: hidden;
+        border-bottom: 1px solid #d2d7de;
+        background-image:
+            repeating-linear-gradient(90deg, #d2d7de 0 1px, transparent 1px 40px),
+            repeating-linear-gradient(90deg, #e3e7eb 0 1px, transparent 1px 8px);
+        background-size: 100% 18px, 100% 9px;
+        background-position: left bottom, left bottom;
+        background-repeat: repeat-x;
+    }}
+    .astra-boot-progress {{
+        position: absolute; left: 0; top: 0; bottom: 0; width: 0;
+        background: rgba(124, 47, 57, 0.10);
+        border-right: 2px solid #7c2f39;
+        animation: astra-scrub 2.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    }}
+    @keyframes astra-scrub {{
+        0% {{ width: 0; opacity: 1; }}
+        75% {{ width: 100%; opacity: 1; }}
+        100% {{ width: 100%; opacity: 0; }}
+    }}
+    .astra-boot-meta {{
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 1rem; margin-top: 0.95rem;
+    }}
     .astra-boot-label {{
         color: #6b7684; font-family: 'IBM Plex Mono', ui-monospace, monospace;
         font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase;
     }}
-    .astra-boot-line {{
-        height: 0.9rem; margin-top: 1rem;
-        background: linear-gradient(90deg, #d2d7de 25%, #fdfdfc 50%, #d2d7de 75%);
-        background-size: 200% 100%;
-        animation: astra-boot-shimmer 1.3s ease-in-out infinite;
+    .astra-boot-dot {{
+        width: 7px; height: 7px; flex: 0 0 7px; background: #7c2f39;
+        animation: astra-pulse 1.2s ease-in-out infinite;
     }}
-    .astra-boot-line.short {{ width: 36%; }}
-    .astra-boot-line.medium {{ width: 64%; }}
-    .astra-boot-line.long {{ width: 88%; }}
-    @keyframes astra-boot-shimmer {{
-        from {{ background-position: 200% 0; }}
-        to {{ background-position: -200% 0; }}
+    @keyframes astra-pulse {{
+        0%, 100% {{ opacity: 1; }}
+        50% {{ opacity: 0.2; }}
     }}
-    @media (prefers-reduced-motion: reduce) {{ .astra-boot-line {{ animation: none; }} }}
+    @media (prefers-reduced-motion: reduce) {{
+        .astra-boot-progress, .astra-boot-dot {{ animation: none; }}
+        .astra-boot-progress {{ width: 45%; }}
+    }}
     </style>
     <div class="astra-boot">
         <div class="astra-boot-card">
-            <div class="astra-boot-bar"></div>
-            <div class="astra-boot-label">{boot_label}</div>
-            <div class="astra-boot-line short"></div>
-            <div class="astra-boot-line long"></div>
-            <div class="astra-boot-line medium"></div>
+            <div class="astra-boot-rule"></div>
+            <div class="astra-boot-track">
+                <div class="astra-boot-progress"></div>
+            </div>
+            <div class="astra-boot-meta">
+                <span class="astra-boot-label">{boot_label}</span>
+                <span class="astra-boot-dot"></span>
+            </div>
         </div>
     </div>
     """,
