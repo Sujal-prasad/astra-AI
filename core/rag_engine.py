@@ -1,16 +1,8 @@
-import os
-from langchain_mistralai import ChatMistralAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
+from core.llm import get_llm, invoke_with_retry
 from core.vector_stores import build_vector_store, load_vector_store, get_retriever
-
-def get_llm():
-    return ChatMistralAI(
-        model="mistral-small-latest",
-        mistral_api_key=os.getenv("MISTRAL_API_KEY"),
-        temperature=0.3,
-    )
 
 def format_docs(docs):
     return "\n\n".join([doc.page_content for doc in docs])
@@ -55,9 +47,9 @@ Context from meeting transcript:
     return rag_chain
 
 
-def load_rag_chain():
-    vector_store = load_vector_store()
-    retriver = get_retriever()
+def load_rag_chain(collection_name: str):
+    vector_store = load_vector_store(collection_name)
+    retriver = get_retriever(vector_store, k=4)
 
     llm = get_llm()
     prompt = ChatPromptTemplate.from_messages([
@@ -92,6 +84,6 @@ Context from meeting transcript:
 
 def ask_question(rag_chain, question:str) -> str:
     print(f"Question : {question}")
-    answer = rag_chain.invoke(question)
+    answer = invoke_with_retry(rag_chain, question)
     print(f"answer :{answer}")
     return answer

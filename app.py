@@ -1,19 +1,25 @@
-import os
+import html
+import json
 import re
 import uuid
 from pathlib import Path
+from shutil import which
 
 import streamlit as st
 import streamlit.components.v1 as components
 from dotenv import load_dotenv
 
+ROOT = Path(__file__).resolve().parent
+load_dotenv(ROOT / ".ENV")
 
-load_dotenv(".ENV")
 
-
+import auth_server
+from core.llm import OLLAMA_BASE_URL, OLLAMA_MODEL, installed_models
 from core.rag_engine import ask_question
+from core.transcriber import WHISPER_MODEL
 from main import run_pipeline
-from utils.superbase_client import supabase
+from utils.audio_processor import cleanup_files
+from utils.superbase_client import create_supabase_client
 
 st.set_page_config(
     page_title="Astra — Never Lose the Thread.",
@@ -21,6 +27,84 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+
+def redirect(url: str) -> None:
+    components.html(
+        f"<script>window.top.location.replace({json.dumps(url)});</script>",
+        height=0,
+    )
+
+
+def get_supabase():
+    client = st.session_state.get("supabase")
+    if client is None:
+        client = create_supabase_client()
+        st.session_state.supabase = client
+    return client
+
+
+def restore_auth_session() -> bool:
+    access_token = st.query_params.get("access_token")
+    refresh_token = st.query_params.get("refresh_token")
+    if not access_token or not refresh_token:
+        return False
+
+    st.query_params.clear()
+    try:
+        auth_response = get_supabase().auth.set_session(access_token, refresh_token)
+    except Exception as error:
+        st.session_state.auth_error = str(error)
+        return False
+
+    if not auth_response.user:
+        return False
+
+    st.session_state.user = auth_response.user
+    st.session_state.session = auth_response.session
+    return True
+
+
+def require_authentication() -> None:
+    pending = st.session_state.pop("pending_redirect", None)
+    if pending:
+        redirect(pending)
+        st.stop()
+
+    if st.session_state.get("user"):
+        return
+
+    if restore_auth_session():
+        st.rerun()
+
+    error = st.session_state.pop("auth_error", None)
+    if error:
+        st.error(f"Authentication could not be completed: {error}")
+        st.link_button("Back to sign in", auth_server.LOGIN_URL)
+        st.stop()
+
+    redirect(auth_server.LOGIN_URL)
+    st.stop()
+
+
+def sign_out() -> None:
+    client = st.session_state.get("supabase")
+    if client is not None:
+        try:
+            client.auth.sign_out()
+        except Exception:
+            pass
+    st.session_state.clear()
+    st.session_state.pending_redirect = auth_server.LOGOUT_URL
+    st.rerun()
+
+
+def current_user_email() -> str:
+    user = st.session_state.get("user")
+    return getattr(user, "email", None) or "Signed in"
+
+
+require_authentication()
 
 STYLES = """
 <style>
@@ -259,49 +343,18 @@ def reset_workspace() -> None:
     st.rerun()
 
 
-def restore_auth_session() -> None:
-    access_token = st.query_params.get("access_token")
-    refresh_token = st.query_params.get("refresh_token")
-    if not access_token or not refresh_token or st.session_state.get("user"):
-        return
-
-    try:
-        auth_response = supabase.auth.set_session(access_token, refresh_token)
-    except Exception as error:
-        st.error(f"Authentication could not be completed: {error}")
-        st.query_params.clear()
-        return
-
-    if auth_response.user:
-        st.session_state.user = auth_response.user
-        st.session_state.session = auth_response.session
-        st.query_params.clear()
-        st.rerun()
-
-
-def require_authentication() -> None:
-    restore_auth_session()
-    if st.session_state.get("user"):
-        return
-
-    components.html(
-        """
-        <script>
-            window.top.location.replace("http://localhost:8001/html/login.html");
-        </script>
-        """,
-        height=0,
-    )
-    st.stop()
-
-
 def save_upload(uploaded_file) -> str:
-    upload_dir = Path("downloads")
+    upload_dir = ROOT / "downloads"
     upload_dir.mkdir(exist_ok=True)
     suffix = Path(uploaded_file.name).suffix or ".audio"
     target = upload_dir / f"streamlit_upload_{uuid.uuid4().hex}{suffix}"
     target.write_bytes(uploaded_file.getbuffer())
     return str(target)
+
+
+@st.cache_data(ttl=15, show_spinner=False)
+def ollama_models() -> list:
+    return installed_models()
 
 
 def status_row(label: str, detail: str, ok: bool) -> str:
@@ -323,8 +376,9 @@ def render_analysis(result: dict) -> None:
 
     st.markdown(
         f'<div class="record">'
-        f'<div class="slug"><b>REC</b> &nbsp;·&nbsp; {source} &nbsp;·&nbsp; {language.upper()}</div>'
-        f"<h2>{title}</h2></div>",
+        f'<div class="slug"><b>REC</b> &nbsp;·&nbsp; {html.escape(source)} '
+        f"&nbsp;·&nbsp; {html.escape(language.upper())}</div>"
+        f"<h2>{html.escape(title)}</h2></div>",
         unsafe_allow_html=True,
     )
 
@@ -361,6 +415,11 @@ def render_chat() -> None:
         unsafe_allow_html=True,
     )
 
+    rag_chain = st.session_state.get("result", {}).get("rag_chain")
+    if rag_chain is None:
+        st.info("The follow-up assistant is unavailable for this transcript.")
+        return
+
     messages = st.session_state.setdefault("messages", [])
     if not messages:
         st.markdown(
@@ -378,17 +437,18 @@ def render_chat() -> None:
 
     question = st.chat_input("Ask a question about the meeting")
     if question:
-        messages.append({"role": "user", "content": question})
         with st.chat_message("user"):
             st.markdown(question)
         with st.chat_message("assistant"):
             with st.spinner("Reading the transcript..."):
-                answer = ask_question(st.session_state.result["rag_chain"], question)
+                try:
+                    answer = ask_question(rag_chain, question)
+                except Exception as error:
+                    st.error(f"That question could not be answered: {error}")
+                    return
             st.markdown(answer)
+        messages.append({"role": "user", "content": question})
         messages.append({"role": "assistant", "content": answer})
-
-
-require_authentication()
 
 
 st.markdown(
@@ -404,20 +464,24 @@ st.markdown(
 
 @st.dialog("Sign out of Astra?")
 def confirm_sign_out():
-    st.write("Your current workspace session will be closed.")
-    if st.button("Sign out", type="primary", use_container_width=True):
-        supabase.auth.sign_out()
-        st.session_state.clear()
-        st.success("You have been signed out.")
-        st.link_button("Return to login", "http://localhost:8001/html/login.html", use_container_width=True)
-    if st.button("Cancel", use_container_width=True):
+    st.write("Your workspace will be cleared and you will return to the sign-in page.")
+    confirm, cancel = st.columns(2)
+    if confirm.button("Sign out", type="primary", use_container_width=True):
+        sign_out()
+    if cancel.button("Stay signed in", use_container_width=True):
         st.rerun()
 
 
 with st.sidebar:
+    st.markdown(
+        f'<div class="mono">Signed in</div>'
+        f'<div class="slug">{html.escape(current_user_email())}</div>',
+        unsafe_allow_html=True,
+    )
     if st.button("Sign out", use_container_width=True):
         confirm_sign_out()
 
+    st.markdown("---")
     st.markdown('<div class="mono">Step 01</div>', unsafe_allow_html=True)
     st.markdown("## New meeting")
     source_mode = st.radio("Source", ["Upload file", "YouTube URL"], horizontal=True)
@@ -444,23 +508,33 @@ with st.sidebar:
     st.markdown("---")
     st.markdown('<div class="mono">Environment</div>', unsafe_allow_html=True)
 
-    has_mistral = bool(os.getenv("MISTRAL_API_KEY"))
-    has_sarvam = bool(os.getenv("SARVAM_API_KEY"))
+    models = ollama_models()
+    reachable = bool(models)
+    model_ready = any(name.startswith(OLLAMA_MODEL.split(":")[0]) for name in models)
+    has_ffmpeg = which("ffmpeg") is not None
+
     rows = [
         status_row(
-            "Mistral key" if has_mistral else "Mistral key missing",
-            "Found in the environment" if has_mistral else "Add MISTRAL_API_KEY to .env or your deployment secrets",
-            has_mistral,
-        )
+            "Ollama running" if reachable else "Ollama unreachable",
+            f"Serving at {OLLAMA_BASE_URL}" if reachable else f"Start it with 'ollama serve' at {OLLAMA_BASE_URL}",
+            reachable,
+        ),
+        status_row(
+            f"Model {OLLAMA_MODEL}" if model_ready else f"Model {OLLAMA_MODEL} missing",
+            "Pulled and ready" if model_ready else f"Run 'ollama pull {OLLAMA_MODEL}'",
+            model_ready,
+        ),
+        status_row(
+            "FFmpeg" if has_ffmpeg else "FFmpeg missing",
+            "Found on PATH" if has_ffmpeg else "Needed for anything other than WAV",
+            has_ffmpeg,
+        ),
+        status_row(
+            f"Whisper {WHISPER_MODEL}",
+            "Transcription runs locally on this machine",
+            True,
+        ),
     ]
-    if language == "hinglish":
-        rows.append(
-            status_row(
-                "Sarvam key" if has_sarvam else "Sarvam key missing",
-                "Found in the environment" if has_sarvam else "Hinglish transcription needs SARVAM_API_KEY",
-                has_sarvam,
-            )
-        )
     st.markdown("".join(rows), unsafe_allow_html=True)
 
 if submitted:
@@ -483,9 +557,12 @@ if submitted:
                 status.update(label="Transcription stopped", state="error")
                 st.error(str(error))
                 st.info(
-                    "Check that your API keys are set and FFmpeg is installed. "
+                    "Check that Ollama is running and FFmpeg is installed. "
                     "The terminal log has the full traceback."
                 )
+            finally:
+                if uploaded_file:
+                    cleanup_files([source])
 
 if st.session_state.get("result"):
     left_column, right_column = st.columns([1.45, 1], gap="large")

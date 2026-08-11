@@ -66,7 +66,7 @@
       window.ASTRA_SUPABASE_URL,
       window.ASTRA_SUPABASE_ANON_KEY
     );
-    const appUrl = "http://localhost:8501";
+    const appUrl = window.ASTRA_APP_URL;
     const authPageUrl = window.location.href.split("?")[0].split("#")[0];
     const statusMessage = document.getElementById("auth-status");
 

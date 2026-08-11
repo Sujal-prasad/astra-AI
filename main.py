@@ -1,8 +1,10 @@
+from pathlib import Path
+
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent / ".ENV")
 
-from utils.audio_processor import process_inputs
+from utils.audio_processor import process_inputs, cleanup_files
 from core.transcriber import transcribe_all
 from core.summarise import summarize , generate_title
 from core.extractor import extract_action_items , extract_key_decisions, extract_questions
@@ -10,7 +12,17 @@ from core.rag_engine import build_rag_chain, ask_question
 
 def run_pipeline(source:str, language:str='english')->dict:
     chunks=process_inputs(source)
-    transcript=transcribe_all(chunks,language=language)
+    try:
+        transcript=transcribe_all(chunks,language=language)
+    finally:
+        cleanup_files(chunks)
+
+    if not transcript.strip():
+        raise RuntimeError(
+            "No speech was detected in this recording. Check the audio, "
+            "or try the other transcription language."
+        )
+
     title=generate_title(transcript)
     summary=summarize(transcript)
     action_item=extract_action_items(transcript)

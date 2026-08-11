@@ -1,48 +1,55 @@
-from langchain_mistralai import ChatMistralAI
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_core.runnables import RunnablePassthrough, RunnableLambda, chain
+from core.llm import map_reduce
 
-import os 
+TEMPERATURE = 0.2
 
-def get_llm():
-    return ChatMistralAI(model = "mistral-small-latest", mistral_api_key = os.getenv("MISTRAL_API_KEY"),temperature=0.2)
+ACTION_MAP_PROMPT = (
+    "You are an expert meeting analyst. From this portion of a meeting transcript, "
+    "extract every action item. For each provide:\n"
+    "- Task description\n"
+    "- Owner (who is responsible)\n"
+    "- Deadline (if mentioned, else write 'Not specified')\n\n"
+    "Format as a numbered list. If none are found in this portion, reply with nothing."
+)
 
-def build_chain(system_prompt : str):
-    llm = get_llm()
-    return (
-        RunnablePassthrough() | RunnableLambda(lambda x : {"text" : x}) |ChatPromptTemplate.from_messages([
-        ("system", system_prompt),
-        ("human","{text}"),
-    ]) | llm |StrOutputParser()
-    )
-    
-def extract_action_items(transcript:str)->str:
-    chain = build_chain(
-         "You are an expert meeting analyst. From the meeting transcript, "
-        "extract all action items. For each provide:\n"
-        "- Task description\n"
-        "- Owner (who is responsible)\n"
-        "- Deadline (if mentioned, else write 'Not specified')\n\n"
-        "Format as a numbered list. If none found say 'No action items found.'"
-    )
+ACTION_REDUCE_PROMPT = (
+    "You are an expert meeting analyst. These are action items extracted from "
+    "consecutive portions of one meeting. Merge them into a single numbered list, "
+    "removing duplicates and keeping the owner and deadline for each. "
+    "If the list is empty say 'No action items found.'"
+)
 
-    return chain.invoke(transcript)
+DECISION_MAP_PROMPT = (
+    "You are an expert meeting analyst. From this portion of a meeting transcript, "
+    "extract every key decision that was made. Format as a numbered list. "
+    "If none are found in this portion, reply with nothing."
+)
+
+DECISION_REDUCE_PROMPT = (
+    "You are an expert meeting analyst. These are decisions extracted from "
+    "consecutive portions of one meeting. Merge them into a single numbered list, "
+    "removing duplicates. If the list is empty say 'No key decisions found.'"
+)
+
+QUESTION_MAP_PROMPT = (
+    "From this portion of a meeting transcript, extract every unresolved question "
+    "or topic needing follow-up. Format as a numbered list. "
+    "If none are found in this portion, reply with nothing."
+)
+
+QUESTION_REDUCE_PROMPT = (
+    "These are open questions extracted from consecutive portions of one meeting. "
+    "Merge them into a single numbered list, removing duplicates and dropping any "
+    "that were answered later. If the list is empty say 'No open questions found.'"
+)
+
+
+def extract_action_items(transcript: str) -> str:
+    return map_reduce(transcript, ACTION_MAP_PROMPT, ACTION_REDUCE_PROMPT, TEMPERATURE)
+
 
 def extract_key_decisions(transcript: str) -> str:
-    chain = build_chain(
-        "You are an expert meeting analyst. From the meeting transcript, "
-        "extract all key decisions made. Format as a numbered list. "
-        "If none found say 'No key decisions found.'"
-    )
-    return chain.invoke(transcript)
+    return map_reduce(transcript, DECISION_MAP_PROMPT, DECISION_REDUCE_PROMPT, TEMPERATURE)
 
 
 def extract_questions(transcript: str) -> str:
-    chain = build_chain(
-        "From the meeting transcript, extract all unresolved questions "
-        "or topics needing follow-up. Format as a numbered list. "
-        "If none found say 'No open questions found.'"
-    )
-    return chain.invoke(transcript)
+    return map_reduce(transcript, QUESTION_MAP_PROMPT, QUESTION_REDUCE_PROMPT, TEMPERATURE)

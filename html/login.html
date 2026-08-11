@@ -123,9 +123,10 @@
         window.ASTRA_SUPABASE_URL,
         window.ASTRA_SUPABASE_ANON_KEY
     );
-    const appUrl = "http://localhost:8501";
+    const appUrl = window.ASTRA_APP_URL;
     const authPageUrl = window.location.href.split("?")[0].split("#")[0];
     const statusMessage = document.getElementById("auth-status");
+    const signedOut = new URLSearchParams(window.location.search).has("signedout");
 
     function setStatus(message) {
         statusMessage.textContent = message;
@@ -161,9 +162,14 @@
         await enterAstra(data.session);
     });
 
-    supabaseClient.auth.getSession().then(({ data }) => {
-        if (data.session) enterAstra(data.session);
-    });
+    if (signedOut) {
+        setStatus("You have been signed out.");
+        window.history.replaceState({}, "", authPageUrl);
+    } else {
+        supabaseClient.auth.getSession().then(({ data }) => {
+            if (data.session) enterAstra(data.session);
+        });
+    }
 </script>
 </html>
 

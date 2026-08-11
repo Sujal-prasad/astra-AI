@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Astra - Signing out</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #e9ebee;
+        color: #39424e;
+        font-family: 'Instrument Sans', system-ui, -apple-system, sans-serif;
+      }
+      .note {
+        font-family: 'IBM Plex Mono', ui-monospace, monospace;
+        font-size: 0.72rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #6b7684;
+      }
+    </style>
+  </head>
+  <body>
+    <p class="note" id="logout-status">Signing out...</p>
+  </body>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../auth-config.js"></script>
+  <script>
+    (async () => {
+      try {
+        const supabaseClient = window.supabase.createClient(
+          window.ASTRA_SUPABASE_URL,
+          window.ASTRA_SUPABASE_ANON_KEY
+        );
+        await supabaseClient.auth.signOut();
+      } catch (error) {
+        document.getElementById("logout-status").textContent = error.message;
+      } finally {
+        window.location.replace("login.html?signedout=1");
+      }
+    })();
+  </script>
+</html>

@@ -37,6 +37,7 @@ downloads/*
 *.sqlite3
 .chroma/
 chroma_db/
+vector_db/
 models/
 .cache/
 
