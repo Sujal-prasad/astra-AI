@@ -12,10 +12,13 @@ STAGE_ORDER = tuple(name for name, _, _ in STAGE_PLAN)
 STAGE_LABEL = {name: label for name, label, _ in STAGE_PLAN}
 STAGE_WEIGHT = {name: weight for name, _, weight in STAGE_PLAN}
 
-MEASURABLE_FRACTION = 0.04
-MEASURABLE_SECONDS = 1.5
+MEASURABLE_FRACTION = 0.15
+MEASURABLE_SECONDS = 3.0
 SMOOTHING = 0.4
+SMOOTHING_UP = 0.12
 ANCHOR_MIN_UNITS = 0.12
+ANCHOR_MIN_DELTA = 0.08
+MIN_RATE_SECONDS = 4.0
 ETA_STAGES = frozenset({"downloading", "transcribing", "analyzing"})
 
 
@@ -87,7 +90,9 @@ class ProgressTracker:
             return None
 
         anchor_time, anchor_units = self.unit_anchor
-        if completed - anchor_units < ANCHOR_MIN_UNITS:
+        if completed - anchor_units < ANCHOR_MIN_DELTA:
+            return None
+        if now - anchor_time < MIN_RATE_SECONDS:
             return None
 
         per_unit = (now - anchor_time) / (completed - anchor_units)
@@ -116,6 +121,8 @@ class ProgressTracker:
         measured = self._unit_rate_eta(event, now)
         if measured is not None:
             remaining_here, stage_total = measured
+        elif event.get("total"):
+            return self._carry(now)
         else:
             stage_elapsed = now - self.stage_started_at
             if fraction < MEASURABLE_FRACTION or stage_elapsed < MEASURABLE_SECONDS:
@@ -127,9 +134,12 @@ class ProgressTracker:
         projected = stage_total * (after / self.weights[stage])
         estimate = remaining_here + projected
 
-        self.eta = estimate if self.eta is None else (
-            (1 - SMOOTHING) * max(0.0, self.eta - (now - self.eta_at)) + SMOOTHING * estimate
-        )
+        if self.eta is None:
+            self.eta = estimate
+        else:
+            decayed = max(0.0, self.eta - (now - self.eta_at))
+            weight = SMOOTHING if estimate <= decayed else SMOOTHING_UP
+            self.eta = (1 - weight) * decayed + weight * estimate
         self.eta_at = now
         return self.overall, STAGE_LABEL[stage], self.eta
 

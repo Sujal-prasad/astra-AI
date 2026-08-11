@@ -4,6 +4,7 @@ from core.llm import build_chain, invoke_with_retry, split_transcript
 
 TEMPERATURE = 0.2
 REDUCE_BATCH = 6
+STREAM_TOKEN_TARGET = 400
 
 ANALYSIS_MAP_PROMPT = """Analyze the portion of a meeting transcript given by the user.
 Return ONLY valid JSON with exactly these keys:
@@ -37,6 +38,16 @@ DEFAULT_RESULT = {
 }
 
 
+def _flatten(value) -> str:
+    if isinstance(value, dict):
+        parts = [_flatten(item) for item in value.values()]
+    elif isinstance(value, (list, tuple)):
+        parts = [_flatten(item) for item in value]
+    else:
+        return str(value).strip()
+    return " — ".join(part for part in parts if part)
+
+
 def _parse_result(raw: str) -> dict:
     text = raw.strip()
     if text.startswith("```"):
@@ -50,9 +61,14 @@ def _parse_result(raw: str) -> dict:
     for key in result:
         value = parsed.get(key, result[key])
         if key == "title":
-            result[key] = str(value).strip() or result[key]
+            result[key] = _flatten(value) or result[key]
         elif isinstance(value, list):
-            result[key] = [str(item).strip() for item in value if str(item).strip()]
+            items = []
+            for item in value:
+                text = _flatten(item)
+                if text:
+                    items.append(text)
+            result[key] = items
     return result
 
 
@@ -70,6 +86,22 @@ def _merge_partials(partials: list) -> dict:
                     collected.append(item)
         merged[key] = collected
     return merged
+
+
+def _section_callback(progress_callback, index: int, total: int):
+    if not progress_callback:
+        return None
+
+    start = (index - 1) / (total + 1)
+    end = index / (total + 1)
+
+    def wrapped(event):
+        if event.get("stage") == "analyzing" and event.get("tokens"):
+            within = min(0.95, event["tokens"] / STREAM_TOKEN_TARGET)
+            event = dict(event, fraction=start + (end - start) * within)
+        progress_callback(event)
+
+    return wrapped
 
 
 def _reduce_batch(reduce_chain, batch: list, progress_callback) -> dict:
@@ -130,7 +162,7 @@ def analyze_transcript(transcript: str, progress_callback=None) -> dict:
         raw = invoke_with_retry(
             map_chain,
             {"text": chunk},
-            progress_callback=progress_callback,
+            progress_callback=_section_callback(progress_callback, index, len(chunks)),
         )
         try:
             partials.append(_parse_result(raw))
