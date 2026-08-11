@@ -8,9 +8,10 @@ The only external service left is Supabase, which handles sign-in.
 
 | Component | Install | Notes |
 |---|---|---|
-| Python 3.12 | already installed | `requirements.txt` was frozen on 3.13; markers handle the difference |
+| Python 3.14 | already installed | |
 | FFmpeg | `winget install Gyan.FFmpeg` | Required for every format except WAV, and for YouTube |
-| Ollama | already installed (client 0.22.1) | The LLM runtime |
+| Ollama | already installed | The LLM runtime |
+| Deno | `winget install DenoLand.Deno` | yt-dlp uses it to solve YouTube's JS challenges |
 
 Ollama must be **serving**, not just installed. Launch the Ollama app, or run:
 
@@ -21,15 +22,11 @@ ollama serve
 Confirm with `curl http://localhost:11434/api/tags`. The sidebar Environment panel checks the
 same endpoint.
 
-Set `OLLAMA_MODEL` in `.ENV` to whichever you prefer:
+The model is `qwen2.5:3b`, set by `OLLAMA_MODEL`. At 3B it fits in about 3 GB of RAM and stays
+responsive on CPU, which is what makes an always-on self-hosted demo practical — a 7B model
+would leave a visitor waiting minutes per summary. Its context window is 32k, so
+`OLLAMA_NUM_CTX=8192` has plenty of headroom.
 
-| Model | Size | Context | Notes |
-|---|---|---|---|
-| `mistral:latest` | 7B | 32k | Default. Good balance of quality and speed |
-| `gemma2:latest` | 9B | 8k | Better summaries; context maxes out at `OLLAMA_NUM_CTX=8192` |
-| `qwen2.5:3b` | 3B | 32k | Fastest, weaker on long meetings |
-
-A GPU is not required, but on CPU expect a few minutes of summarization per hour of meeting.
 Whisper `small` is the transcription default; `medium` is meaningfully better for Hinglish and
 costs about 3x the time.
 
@@ -52,17 +49,26 @@ python run.py
 This starts the auth server, starts Streamlit headless, and opens the login page. The sidebar
 Environment panel tells you whether Ollama is reachable and whether your model is pulled.
 
-## 4. Expose it to the internet
+## 4. Expose it to the internet with Cloudflare Tunnel
 
-Two services need to be reachable: the auth pages on 8001 and the workspace on 8501. The
-cleanest arrangement puts both behind **one hostname** with path routing, so the browser sees
-a single origin and the Supabase session in localStorage stays consistent across login,
-workspace, and logout.
+Inference stays on this machine; the tunnel only carries HTTP. No port forwarding, no firewall
+holes, no static IP, no exposed home address — your machine makes an outbound connection only,
+and TLS terminates at Cloudflare's edge.
 
-### Option A — Cloudflare Tunnel (recommended)
+Two services need to be reachable: the auth pages on 8001 and the workspace on 8501. Both go
+behind **one hostname** with path routing, so the browser sees a single origin and the Supabase
+session in localStorage stays consistent across login, workspace, and logout.
 
-No port forwarding, no firewall holes, no static IP, and TLS is handled for you. Your machine
-makes an outbound connection only.
+### You need a domain on Cloudflare
+
+A **named** tunnel requires a domain whose nameservers point at Cloudflare. This matters
+because the alternative — a quick tunnel — hands you a random `*.trycloudflare.com` URL that
+**changes every restart**. A URL on a CV or a portfolio has to be stable, so buy a cheap
+domain and add it to Cloudflare (free plan) before starting.
+
+Use quick tunnels (`cloudflared tunnel --url http://localhost:8501`) for a one-off share only.
+
+### Set up the tunnel
 
 ```
 winget install Cloudflare.cloudflared
@@ -103,23 +109,16 @@ ASTRA_OPEN_BROWSER=0
 Leave `ASTRA_AUTH_BIND` and `ASTRA_APP_BIND` at `127.0.0.1`. The tunnel reaches them on
 loopback, and nothing is exposed on your LAN.
 
-**Be aware:** this does put Cloudflare in the request path, which is a compromise against
-"no cloud". Traffic is terminated at their edge. Option B avoids that entirely.
+Cloudflare does sit in the request path and terminates TLS. The models and every recording
+still stay on this machine.
 
-### Option B — Port forward from your own router
+### Alternative: port forward from your own router
 
-Fully self-hosted, nothing in the path but your hardware.
-
-1. Set `ASTRA_AUTH_BIND=0.0.0.0` and `ASTRA_APP_BIND=0.0.0.0`.
-2. Forward external 443 to a local reverse proxy (Caddy is simplest) that does the same path
-   split as the ingress rules above.
-3. Get a certificate — Caddy will fetch one from Let's Encrypt automatically given a domain.
-4. Use dynamic DNS if your ISP rotates your IP.
-5. Add Windows Firewall rules for the proxy port only.
-
-The tradeoffs versus Option A: your home IP is public, you own the TLS renewal, and you are
-directly exposed to internet background scanning. Do not skip the reverse proxy and expose
-8501 raw — Streamlit is not built to be an edge server.
+Only if you want nothing but your own hardware in the path. Set both binds to `0.0.0.0`,
+forward external 443 to a local Caddy doing the same path split, let Caddy fetch a Let's
+Encrypt certificate, and add dynamic DNS if your ISP rotates your IP. The costs: your home IP
+becomes public, you own TLS renewal, and you take internet background scanning directly. Do
+not skip the reverse proxy and expose 8501 raw — Streamlit is not built to be an edge server.
 
 ## 5. Point Supabase at the public URL
 
@@ -135,26 +134,48 @@ those entries exist. Without them Supabase rejects the OAuth callback.
 Also turn **email confirmation on** before going public, or anyone can create an account with
 an address they do not own.
 
-## 6. Start on boot
+## 6. Keep it running
 
-Task Scheduler, "Create Task":
+The link is only as good as this machine's uptime. Four things to set:
+
+**Never sleep.** A sleeping laptop is a dead link. Control Panel → Power Options → set sleep
+and hibernate to Never on AC, and disable "USB selective suspend" if the machine drops network
+on idle.
+
+```
+powercfg /change standby-timeout-ac 0
+powercfg /change hibernate-timeout-ac 0
+```
+
+**Start Astra on boot.** Task Scheduler → Create Task:
 
 - Trigger: At startup
 - Action: Start a program — `pythonw.exe`, arguments `run.py`, start in the project directory
 - Check "Run whether user is logged on or not"
 
-Add a second task the same way for `cloudflared tunnel run astra`.
+**Install the tunnel as a Windows service** so it restarts with the machine and recovers on its
+own — better than a second scheduled task:
 
-## 7. Capacity
+```
+cloudflared service install
+```
 
-Everything runs in one process on one machine, so be realistic about load:
+**Let Ollama autostart.** The desktop app does this by default; confirm it survives a reboot
+with `curl http://localhost:11434/api/tags`.
 
-- Whisper holds one model in memory as a module-level singleton, and Streamlit is
-  single-process. **Two people transcribing at once will serialize**, and each holds a full
-  recording in memory during conversion.
-- Ollama queues requests. A long meeting fires one LLM call per 3000-character chunk for the
-  summary and each of the three extractors, so a two-hour meeting is dozens of sequential
-  calls.
+## 7. Capacity and abuse
 
-This is comfortable for a handful of colleagues. It is not sized for open public signup — if
-you publish the URL widely, put the signup behind an invite or an allowlist first.
+Everything runs in one process on one machine, so be realistic:
+
+- faster-whisper holds one model as a module-level singleton and Streamlit is single-process,
+  so **two people transcribing at once will serialize**.
+- Ollama queues requests. `qwen2.5:3b` keeps each call fast, and `meeting_analysis.py` does a
+  single JSON pass per transcript chunk rather than one call per section, but a long meeting
+  is still a sequence of calls.
+
+A public URL means strangers can spend your CPU. Before sharing it widely:
+
+- Turn **email confirmation on** in Supabase so signups need a real address.
+- Consider an allowlist — check the signed-in email against a list before rendering the
+  workspace — if you only want specific people running transcriptions.
+- Keep an eye on `downloads/`; failed runs can leave files behind.

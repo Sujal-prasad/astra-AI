@@ -1,5 +1,6 @@
 import html
 import json
+import os
 import re
 import time
 import uuid
@@ -12,6 +13,13 @@ from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".ENV")
+
+SAMPLE_MEETING_PATH = ROOT / "assets" / "sample_meeting.json"
+ALLOWED_EMAILS = {
+    entry.strip().lower()
+    for entry in os.getenv("ASTRA_ALLOWED_EMAILS", "").split(",")
+    if entry.strip()
+}
 
 
 import auth_server
@@ -29,28 +37,48 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+boot_label = "Signing you out" if st.session_state.get("pending_redirect") else "Opening your workspace"
 boot_placeholder = st.empty()
 boot_placeholder.markdown(
-        """
-        <style>
-        .astra-boot { padding: 2rem 0; }
-        .astra-boot-bar { height: 2px; width: 100%; background: #7c2f39; margin-bottom: 1.4rem; }
-        .astra-boot-label { color: #6b7684; font: 0.7rem 'IBM Plex Mono', monospace; letter-spacing: 0.12em; text-transform: uppercase; }
-        .astra-boot-line { height: 0.9rem; margin-top: 1rem; background: linear-gradient(90deg, #dfe3e7 25%, #fdfdfc 50%, #dfe3e7 75%); background-size: 200% 100%; animation: astra-boot-shimmer 1.3s ease-in-out infinite; }
-        .astra-boot-line.short { width: 36%; }
-        .astra-boot-line.medium { width: 64%; }
-        .astra-boot-line.long { width: 88%; }
-        @keyframes astra-boot-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
-        </style>
-        <div class="astra-boot">
+    f"""
+    <style>
+    .astra-boot {{
+        position: fixed; inset: 0; z-index: 999;
+        display: flex; align-items: center; justify-content: center;
+        background: #e9ebee;
+    }}
+    .astra-boot-card {{ width: min(420px, calc(100% - 3rem)); }}
+    .astra-boot-bar {{ height: 2px; background: #7c2f39; margin-bottom: 1.4rem; }}
+    .astra-boot-label {{
+        color: #6b7684; font-family: 'IBM Plex Mono', ui-monospace, monospace;
+        font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase;
+    }}
+    .astra-boot-line {{
+        height: 0.9rem; margin-top: 1rem;
+        background: linear-gradient(90deg, #d2d7de 25%, #fdfdfc 50%, #d2d7de 75%);
+        background-size: 200% 100%;
+        animation: astra-boot-shimmer 1.3s ease-in-out infinite;
+    }}
+    .astra-boot-line.short {{ width: 36%; }}
+    .astra-boot-line.medium {{ width: 64%; }}
+    .astra-boot-line.long {{ width: 88%; }}
+    @keyframes astra-boot-shimmer {{
+        from {{ background-position: 200% 0; }}
+        to {{ background-position: -200% 0; }}
+    }}
+    @media (prefers-reduced-motion: reduce) {{ .astra-boot-line {{ animation: none; }} }}
+    </style>
+    <div class="astra-boot">
+        <div class="astra-boot-card">
             <div class="astra-boot-bar"></div>
-            <div class="astra-boot-label">Astra / restoring workspace</div>
+            <div class="astra-boot-label">{boot_label}</div>
             <div class="astra-boot-line short"></div>
             <div class="astra-boot-line long"></div>
             <div class="astra-boot-line medium"></div>
         </div>
-        """,
-        unsafe_allow_html=True,
+    </div>
+    """,
+    unsafe_allow_html=True,
 )
 
 
@@ -90,6 +118,18 @@ def restore_auth_session() -> bool:
     return True
 
 
+def enforce_allowlist() -> None:
+    if not ALLOWED_EMAILS:
+        return
+    if current_user_email().lower() in ALLOWED_EMAILS:
+        return
+
+    boot_placeholder.empty()
+    st.error("This account is not on the allowlist for this Astra instance.")
+    st.link_button("Sign in with another account", auth_server.LOGOUT_URL)
+    st.stop()
+
+
 def require_authentication() -> None:
     pending = st.session_state.pop("pending_redirect", None)
     if pending:
@@ -97,6 +137,7 @@ def require_authentication() -> None:
         st.stop()
 
     if st.session_state.get("user"):
+        enforce_allowlist()
         return
 
     if restore_auth_session():
@@ -104,6 +145,7 @@ def require_authentication() -> None:
 
     error = st.session_state.pop("auth_error", None)
     if error:
+        boot_placeholder.empty()
         st.error(f"Authentication could not be completed: {error}")
         st.link_button("Back to sign in", auth_server.LOGIN_URL)
         st.stop()
@@ -129,7 +171,11 @@ def current_user_email() -> str:
     return getattr(user, "email", None) or "Signed in"
 
 
-require_authentication()
+demo_mode = st.query_params.get("demo") == "1"
+
+if not demo_mode:
+    require_authentication()
+
 boot_placeholder.empty()
 
 STYLES = """
@@ -424,20 +470,12 @@ p, li, label, .stMarkdown { color: var(--ink-soft); }
 .empty h3 { margin: 0.6rem 0 0.5rem; font-size: 1.3rem; }
 .empty p { color: var(--slate); margin: 0; line-height: 1.65; }
 
-/* ---------- processing skeleton ---------- */
-.loading-shell { max-width: 760px; border-top: 2px solid var(--ink); padding-top: 1rem; }
-.loading-shell h3 { margin: 0.6rem 0 1.25rem; }
-.skeleton-line {
-    height: 0.85rem;
-    margin: 0.75rem 0;
-    background: linear-gradient(90deg, #dfe3e7 25%, #f7f7f6 50%, #dfe3e7 75%);
-    background-size: 200% 100%;
-    animation: skeleton-shimmer 1.4s ease-in-out infinite;
+/* ---------- workspace header ---------- */
+.workspace-head { padding: 0 0 0.9rem; margin-bottom: 1.4rem; border-bottom: 1px solid var(--line); }
+.workspace-head .kicker { display: flex; align-items: center; gap: 0.55rem; margin: 0; }
+.workspace-head .kicker::before {
+    content: ""; width: 9px; height: 9px; background: var(--signal); display: inline-block;
 }
-.skeleton-line.short { width: 42%; }
-.skeleton-line.medium { width: 68%; }
-.skeleton-line.long { width: 92%; }
-@keyframes skeleton-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 
 @media (max-width: 640px) {
     .masthead h1 { font-size: 2rem; }
@@ -534,13 +572,34 @@ def render_analysis(result: dict) -> None:
         )
 
 
-def render_chat() -> None:
+def load_sample_meeting() -> dict:
+    return json.loads(SAMPLE_MEETING_PATH.read_text(encoding="utf-8"))
+
+
+def render_chat(locked: bool = False) -> None:
     st.markdown(
         '<div class="panel-head"><div class="mono">Follow up</div>'
         "<h3>Ask about this meeting</h3>"
         "<p>Every answer is drawn from the transcript above.</p></div>",
         unsafe_allow_html=True,
     )
+
+    if locked:
+        st.markdown(
+            '<ul class="prompts">'
+            "<li>What did we agree to ship first?</li>"
+            "<li>Who owns the follow-ups, and by when?</li>"
+            "<li>What was left unresolved?</li>"
+            "</ul>",
+            unsafe_allow_html=True,
+        )
+        st.link_button(
+            "Sign in to ask questions",
+            auth_server.LOGIN_URL,
+            type="primary",
+            use_container_width=True,
+        )
+        return
 
     rag_chain = st.session_state.get("result", {}).get("rag_chain")
     if rag_chain is None:
@@ -578,16 +637,22 @@ def render_chat() -> None:
         messages.append({"role": "assistant", "content": answer})
 
 
-st.markdown(
+MASTHEAD = (
     '<div class="masthead">'
     '<div class="kicker mono">Astra — Never Lose the Thread.</div>'
     "<h1>Read the meeting in two minutes.</h1>"
     "<p>Bring a recording or a YouTube link. Astra writes the transcript, pulls out the decisions "
     "and the action items, and then answers whatever you still need to know.</p>"
     "</div>"
-    '<div class="ruler"></div>',
-    unsafe_allow_html=True,
+    '<div class="ruler"></div>'
 )
+
+WORKSPACE_HEAD = (
+    '<div class="workspace-head">'
+    '<div class="kicker mono">Astra — Never Lose the Thread.</div>'
+    "</div>"
+)
+
 
 @st.dialog("Sign out of Astra?")
 def confirm_sign_out():
@@ -599,16 +664,42 @@ def confirm_sign_out():
         st.rerun()
 
 
-with st.sidebar:
-    st.markdown(
-        f'<div class="mono">Signed in</div>'
-        f'<div class="slug">{html.escape(current_user_email())}</div>',
-        unsafe_allow_html=True,
-    )
-    if st.button("Sign out", key="sign_out_button", use_container_width=True):
-        confirm_sign_out()
+submitted = False
+source_mode = "Upload file"
+uploaded_file = None
+source_url = ""
+language = "english"
 
-    st.markdown("---")
+if demo_mode:
+    with st.sidebar:
+        st.markdown('<div class="mono">Sample meeting</div>', unsafe_allow_html=True)
+        st.markdown("## You are viewing a demo")
+        st.markdown(
+            "This is a saved meeting record so you can see the output without signing up. "
+            "Transcription, analysis, and the follow-up assistant all run locally on the "
+            "machine hosting Astra."
+        )
+        st.link_button(
+            "Sign in to run your own",
+            auth_server.LOGIN_URL,
+            type="primary",
+            use_container_width=True,
+        )
+        st.link_button("Create an account", auth_server.SIGNUP_URL, use_container_width=True)
+
+    sample = load_sample_meeting()
+    st.session_state.language = sample.get("language", "english")
+    st.session_state.source_label = sample.get("source_label", "Sample recording")
+
+    st.markdown(WORKSPACE_HEAD, unsafe_allow_html=True)
+    left_column, right_column = st.columns([1.45, 1], gap="large")
+    with left_column:
+        render_analysis(sample)
+    with right_column:
+        render_chat(locked=True)
+    st.stop()
+
+with st.sidebar:
     st.markdown('<div class="mono">Step 01</div>', unsafe_allow_html=True)
     st.markdown("## New meeting")
     source_mode = st.radio("Source", ["Upload file", "YouTube URL"], horizontal=True)
@@ -664,6 +755,15 @@ with st.sidebar:
     ]
     st.markdown("".join(rows), unsafe_allow_html=True)
 
+    st.markdown("---")
+    st.markdown(
+        f'<div class="mono">Signed in</div>'
+        f'<div class="slug">{html.escape(current_user_email())}</div>',
+        unsafe_allow_html=True,
+    )
+    if st.button("Sign out", key="sign_out_button", use_container_width=True):
+        confirm_sign_out()
+
 if submitted:
     if source_mode == "Upload file" and uploaded_file is None:
         st.sidebar.error("Pick an audio or video file to continue.")
@@ -674,20 +774,6 @@ if submitted:
         st.session_state.language = language
         st.session_state.source_label = uploaded_file.name if uploaded_file else "YouTube"
         st.session_state.pop("messages", None)
-        loading_placeholder = st.empty()
-        loading_placeholder.markdown(
-            '<div class="loading-shell">'
-            '<div class="mono">Working locally</div>'
-            '<h3>Building your meeting record...</h3>'
-            '<div class="skeleton-line short"></div>'
-            '<div class="skeleton-line long"></div>'
-            '<div class="skeleton-line medium"></div>'
-            '<div class="skeleton-line long"></div>'
-            '<div class="skeleton-line short"></div>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-        pipeline_progress = st.progress(0, text="Starting meeting pipeline...")
         progress_state = {"stage": None, "started_at": time.monotonic(), "fraction": 0.0}
         analysis_token_target = 256
 
@@ -769,17 +855,15 @@ if submitted:
             message = progress.get("message") or f"{label}..."
             pipeline_progress.progress(progress_state["fraction"], text=f"{message} | {eta_text}")
 
-        with st.status("Starting meeting pipeline...", expanded=True) as status:
+        with st.status("Building your meeting record...", expanded=True) as status:
+            pipeline_progress = st.progress(0.0, text="Starting meeting pipeline...")
             try:
-                st.write("Extracting audio and writing the transcript...")
                 result = run_pipeline(source, language, progress_callback=update_pipeline_progress)
                 st.session_state.result = result
                 pipeline_progress.progress(1.0, text="Meeting record ready")
-                loading_placeholder.empty()
-                status.update(label="Brief ready", state="complete", expanded=False)
+                status.update(label="Meeting record ready", state="complete", expanded=False)
             except Exception as error:
-                loading_placeholder.empty()
-                status.update(label="Transcription stopped", state="error")
+                status.update(label="Transcription stopped", state="error", expanded=True)
                 st.error(str(error))
                 st.info(
                     "Check that Ollama is running and FFmpeg is installed. "
@@ -790,12 +874,14 @@ if submitted:
                     cleanup_files([source])
 
 if st.session_state.get("result"):
+    st.markdown(WORKSPACE_HEAD, unsafe_allow_html=True)
     left_column, right_column = st.columns([1.45, 1], gap="large")
     with left_column:
         render_analysis(st.session_state.result)
     with right_column:
         render_chat()
 else:
+    st.markdown(MASTHEAD, unsafe_allow_html=True)
     st.markdown(
         '<div class="empty"><div class="mono">No meeting loaded</div>'
         "<h3>Start with a recording or a link.</h3>"

@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Astra — Sign In</title>
-    <link rel="stylesheet" href="../css/login.css">
+    <link rel="stylesheet" href="../css/auth.css">
 </head>
 
 <body>
@@ -16,6 +16,7 @@
             <div class="transition-label mono">Opening your workspace</div>
             <div class="transition-line short"></div>
             <div class="transition-line long"></div>
+            <div class="transition-line medium"></div>
         </div>
     </div>
 
@@ -118,6 +119,11 @@
                     <a href="signup.html">Create one</a>
                 </p>
 
+                <p class="demo-link">
+                    Just looking?
+                    <a href="#" id="view-demo">View a sample meeting</a>
+                </p>
+
             </div>
 
         </div>
@@ -137,8 +143,9 @@
     const statusMessage = document.getElementById("auth-status");
     const signedOut = new URLSearchParams(window.location.search).has("signedout");
 
-    function setStatus(message) {
+    function setStatus(message, kind = "info") {
         statusMessage.textContent = message;
+        statusMessage.className = "auth-status" + (kind === "info" ? "" : ` is-${kind}`);
     }
 
     function showTransition() {
@@ -160,10 +167,16 @@
             provider: "google",
             options: { redirectTo: authPageUrl }
         });
-        if (error) setStatus(error.message);
+        if (error) setStatus(error.message, "error");
     }
 
     document.getElementById("google-sign-in").addEventListener("click", continueWithGoogle);
+
+    document.getElementById("view-demo").addEventListener("click", (event) => {
+        event.preventDefault();
+        showTransition();
+        window.location.href = `${appUrl}/?demo=1`;
+    });
 
     document.getElementById("login-form").addEventListener("submit", async (event) => {
         event.preventDefault();
@@ -172,12 +185,12 @@
             email: document.getElementById("email").value,
             password: document.getElementById("password").value
         });
-        if (error) return setStatus(error.message);
+        if (error) return setStatus(error.message, "error");
         await enterAstra(data.session);
     });
 
     if (signedOut) {
-        setStatus("You have been signed out.");
+        setStatus("You have been signed out.", "success");
         window.history.replaceState({}, "", authPageUrl);
     } else {
         supabaseClient.auth.getSession().then(({ data }) => {

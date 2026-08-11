@@ -13,7 +13,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 load_dotenv(Path(__file__).resolve().parents[1] / ".ENV")
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "mistral:latest")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
 NUM_CTX = int(os.getenv("OLLAMA_NUM_CTX", "8192"))
 
 CHUNK_SIZE = 3000

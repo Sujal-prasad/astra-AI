@@ -79,7 +79,6 @@ numba==0.66.0
 numpy==2.4.6
 oauthlib==3.3.1
 onnxruntime==1.28.0
-openai-whisper==20250625
 faster-whisper>=1.2.0
 opentelemetry-api==1.39.1
 opentelemetry-exporter-otlp-proto-common==1.39.1
