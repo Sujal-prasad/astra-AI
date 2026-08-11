@@ -103,18 +103,21 @@ def restore_auth_session() -> bool:
     if not access_token or not refresh_token:
         return False
 
-    st.query_params.clear()
     try:
         auth_response = get_supabase().auth.set_session(access_token, refresh_token)
     except Exception as error:
         st.session_state.auth_error = str(error)
+        st.query_params.clear()
         return False
 
     if not auth_response.user:
+        st.session_state.auth_error = "Supabase did not return a user for this session."
+        st.query_params.clear()
         return False
 
     st.session_state.user = auth_response.user
     st.session_state.session = auth_response.session
+    st.query_params.clear()
     return True
 
 
@@ -209,6 +212,8 @@ html, body, [data-testid="stAppViewContainer"], .stApp {
 
 header[data-testid="stHeader"] { background: transparent; }
 #MainMenu, footer { visibility: hidden; }
+
+.astra-boot { display: none !important; }
 
 .block-container { padding-top: 2.2rem; padding-bottom: 4rem; max-width: 1320px; }
 
