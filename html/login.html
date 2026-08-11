@@ -155,13 +155,28 @@
         document.getElementById("transition-overlay").classList.add("active");
     }
 
-    async function enterAstra(session) {
+    function enterAstra(session) {
         showTransition();
         const params = new URLSearchParams({
             access_token: session.access_token,
             refresh_token: session.refresh_token
         });
         window.location.href = `${appUrl}/?${params.toString()}`;
+    }
+
+    function enterAstraAutomatically(session) {
+        const previous = Number(sessionStorage.getItem("astra-auto-entry") || 0);
+        sessionStorage.setItem("astra-auto-entry", String(Date.now()));
+        if (previous && Date.now() - previous < 8000) {
+            sessionStorage.removeItem("astra-auto-entry");
+            setStatus(
+                "Sign-in kept returning here, so your stored session is probably stale. " +
+                "Sign in again to refresh it.",
+                "error"
+            );
+            return;
+        }
+        enterAstra(session);
     }
 
     async function continueWithGoogle() {
@@ -189,15 +204,17 @@
             password: document.getElementById("password").value
         });
         if (error) return setStatus(error.message, "error");
-        await enterAstra(data.session);
+        sessionStorage.removeItem("astra-auto-entry");
+        enterAstra(data.session);
     });
 
     if (signedOut) {
         setStatus("You have been signed out.", "success");
+        sessionStorage.removeItem("astra-auto-entry");
         window.history.replaceState({}, "", authPageUrl);
     } else {
         supabaseClient.auth.getSession().then(({ data }) => {
-            if (data.session) enterAstra(data.session);
+            if (data.session) enterAstraAutomatically(data.session);
         });
     }
 </script>

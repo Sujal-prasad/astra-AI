@@ -27,12 +27,15 @@
 
       for (const store of [window.localStorage, window.sessionStorage]) {
         for (const key of Object.keys(store)) {
-          if (!key.startsWith("sb-") || !key.includes("auth-token")) continue;
-          try {
-            const stored = JSON.parse(store.getItem(key));
-            if (stored && stored.access_token) accessToken = stored.access_token;
-          } catch (error) {
-            accessToken = accessToken;
+          if (!key.startsWith("sb-") && !key.startsWith("supabase.")) continue;
+          const raw = store.getItem(key);
+          if (raw && raw.includes("access_token")) {
+            try {
+              const stored = JSON.parse(raw);
+              if (stored && stored.access_token) accessToken = stored.access_token;
+            } catch (error) {
+              accessToken = accessToken || null;
+            }
           }
           store.removeItem(key);
         }

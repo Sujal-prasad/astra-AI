@@ -184,6 +184,7 @@ def require_authentication() -> None:
 
 
 def sign_out() -> None:
+    clear_workspace()
     st.session_state.clear()
     st.session_state.pending_redirect = auth_server.LOGOUT_URL
     st.rerun()
@@ -194,10 +195,48 @@ def current_user_email() -> str:
     return getattr(user, "email", None) or "Signed in"
 
 
+@st.cache_resource(show_spinner=False)
+def workspace_store() -> dict:
+    return {}
+
+
+def workspace_key() -> str:
+    user = st.session_state.get("user")
+    return getattr(user, "id", None) or current_user_email()
+
+
+def save_workspace() -> None:
+    if not st.session_state.get("result"):
+        return
+    workspace_store()[workspace_key()] = {
+        "result": st.session_state.result,
+        "messages": st.session_state.get("messages", []),
+        "language": st.session_state.get("language", "english"),
+        "source_label": st.session_state.get("source_label", "Recording"),
+    }
+
+
+def restore_workspace() -> None:
+    if st.session_state.get("result"):
+        return
+    saved = workspace_store().get(workspace_key())
+    if not saved or not saved.get("result"):
+        return
+    st.session_state.result = saved["result"]
+    st.session_state.messages = list(saved.get("messages", []))
+    st.session_state.language = saved.get("language", "english")
+    st.session_state.source_label = saved.get("source_label", "Recording")
+
+
+def clear_workspace() -> None:
+    workspace_store().pop(workspace_key(), None)
+
+
 demo_mode = st.query_params.get("demo") == "1"
 
 if not demo_mode:
     require_authentication()
+    restore_workspace()
 
 boot_placeholder.empty()
 
@@ -534,6 +573,7 @@ def reading_minutes(word_count: int) -> int:
 
 
 def reset_workspace() -> None:
+    clear_workspace()
     st.session_state.pop("result", None)
     st.session_state.pop("messages", None)
     st.rerun()
@@ -670,6 +710,7 @@ def render_chat(locked: bool = False) -> None:
                         answer = f"That question could not be answered. {error}"
                 st.markdown(answer)
         messages.append({"role": "assistant", "content": answer})
+        save_workspace()
 
 
 MASTHEAD = (
@@ -832,6 +873,7 @@ if submitted:
             try:
                 result = run_pipeline(source, language, progress_callback=update_pipeline_progress)
                 st.session_state.result = result
+                save_workspace()
                 pipeline_progress.progress(1.0, text="Meeting record ready")
                 status.update(label="Meeting record ready", state="complete", expanded=False)
             except Exception as error:
