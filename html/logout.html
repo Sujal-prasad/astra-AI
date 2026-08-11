@@ -14,49 +14,13 @@
           <div class="astra-loader-progress"></div>
         </div>
         <div class="astra-loader-meta">
-          <span class="transition-label mono" id="logout-status">Signing you out</span>
+          <span class="transition-label mono">Signing you out</span>
           <span class="astra-loader-dot"></span>
         </div>
       </div>
     </div>
   </body>
-  <script src="../auth-config.js"></script>
   <script>
-    (function () {
-      let accessToken = null;
-
-      for (const store of [window.localStorage, window.sessionStorage]) {
-        for (const key of Object.keys(store)) {
-          if (!key.startsWith("sb-") && !key.startsWith("supabase.")) continue;
-          const raw = store.getItem(key);
-          if (raw && raw.includes("access_token")) {
-            try {
-              const stored = JSON.parse(raw);
-              if (stored && stored.access_token) accessToken = stored.access_token;
-            } catch (error) {
-              accessToken = accessToken || null;
-            }
-          }
-          store.removeItem(key);
-        }
-      }
-
-      if (accessToken && window.ASTRA_SUPABASE_URL) {
-        try {
-          fetch(window.ASTRA_SUPABASE_URL + "/auth/v1/logout?scope=global", {
-            method: "POST",
-            keepalive: true,
-            headers: {
-              apikey: window.ASTRA_SUPABASE_ANON_KEY,
-              Authorization: "Bearer " + accessToken
-            }
-          });
-        } catch (error) {
-          accessToken = null;
-        }
-      }
-
-      window.location.replace("login.html?signedout=1");
-    })();
+    window.location.replace("login.html?signedout=1");
   </script>
 </html>

@@ -18,7 +18,7 @@ AUTH_ORIGIN = os.getenv("ASTRA_AUTH_URL", f"http://{AUTH_HOST}:{AUTH_PORT}").rst
 APP_URL = os.getenv("ASTRA_APP_URL", f"http://{AUTH_HOST}:{APP_PORT}").rstrip("/")
 LOGIN_URL = f"{AUTH_ORIGIN}/html/login.html"
 SIGNUP_URL = f"{AUTH_ORIGIN}/html/signup.html"
-LOGOUT_URL = f"{AUTH_ORIGIN}/html/logout.html"
+LOGOUT_URL = f"{AUTH_ORIGIN}/html/login.html?signedout=1"
 
 SUPABASE_URL = os.getenv("SUPABASE_URL") or os.getenv("SUPERBASE_URL")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY") or os.getenv("SUPERNASE_ANON_KEY")

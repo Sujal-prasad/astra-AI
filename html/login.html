@@ -134,8 +134,51 @@
     </main>
 
 </body>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../auth-config.js"></script>
+<script>
+    const astraSignedOut = new URLSearchParams(window.location.search).has("signedout");
+
+    if (astraSignedOut) {
+        let token = null;
+        for (const store of [window.localStorage, window.sessionStorage]) {
+            for (const key of Object.keys(store)) {
+                if (!key.startsWith("sb-") && !key.startsWith("supabase.")) continue;
+                const raw = store.getItem(key);
+                if (raw && raw.includes("access_token")) {
+                    try {
+                        const parsed = JSON.parse(raw);
+                        if (parsed && parsed.access_token) token = parsed.access_token;
+                    } catch (error) {
+                        token = token || null;
+                    }
+                }
+                store.removeItem(key);
+            }
+        }
+
+        if (token && window.ASTRA_SUPABASE_URL) {
+            try {
+                fetch(window.ASTRA_SUPABASE_URL + "/auth/v1/logout?scope=global", {
+                    method: "POST",
+                    keepalive: true,
+                    headers: {
+                        apikey: window.ASTRA_SUPABASE_ANON_KEY,
+                        Authorization: "Bearer " + token
+                    }
+                });
+            } catch (error) {
+                token = null;
+            }
+        }
+
+        const early = document.getElementById("auth-status");
+        early.textContent = "You have been signed out.";
+        early.className = "auth-status is-success";
+        sessionStorage.removeItem("astra-auto-entry");
+        window.history.replaceState({}, "", window.location.pathname);
+    }
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
     const supabaseClient = window.supabase.createClient(
         window.ASTRA_SUPABASE_URL,
@@ -144,7 +187,7 @@
     const appUrl = window.ASTRA_APP_URL;
     const authPageUrl = window.location.href.split("?")[0].split("#")[0];
     const statusMessage = document.getElementById("auth-status");
-    const signedOut = new URLSearchParams(window.location.search).has("signedout");
+    const signedOut = astraSignedOut;
 
     function setStatus(message, kind = "info") {
         statusMessage.textContent = message;
@@ -208,11 +251,7 @@
         enterAstra(data.session);
     });
 
-    if (signedOut) {
-        setStatus("You have been signed out.", "success");
-        sessionStorage.removeItem("astra-auto-entry");
-        window.history.replaceState({}, "", authPageUrl);
-    } else {
+    if (!signedOut) {
         supabaseClient.auth.getSession().then(({ data }) => {
             if (data.session) enterAstraAutomatically(data.session);
         });

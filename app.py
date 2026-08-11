@@ -186,8 +186,8 @@ def require_authentication() -> None:
 def sign_out() -> None:
     clear_workspace()
     st.session_state.clear()
-    st.session_state.pending_redirect = auth_server.LOGOUT_URL
-    st.rerun()
+    redirect(auth_server.LOGOUT_URL)
+    st.stop()
 
 
 def current_user_email() -> str:
