@@ -84,6 +84,13 @@ def analyze_transcript(transcript: str, progress_callback=None) -> dict:
             partials.append(_parse_result(raw))
         except (json.JSONDecodeError, TypeError, ValueError):
             partials.append(DEFAULT_RESULT.copy())
+        if progress_callback:
+            progress_callback({
+                "stage": "analyzing",
+                "status": "running",
+                "fraction": index / (len(chunks) + 1),
+                "message": f"Analyzed transcript section {index} of {len(chunks)}",
+            })
 
     if len(partials) == 1:
         result = partials[0]

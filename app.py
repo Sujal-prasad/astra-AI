@@ -429,11 +429,16 @@ p, li, label, .stMarkdown { color: var(--ink-soft); }
 .panel-head p { color: var(--slate); font-size: 0.85rem; margin: 0; }
 [data-testid="stChatMessage"] {
     background: transparent;
-    padding: 0.7rem 0;
-    gap: 0.65rem;
-    border-bottom: 1px solid var(--line-soft);
+    padding: 0.45rem 0;
+    gap: 0.6rem;
 }
-[data-testid="stChatMessage"]:last-of-type { border-bottom: none; }
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) [data-testid="stChatMessageContent"] {
+    background: var(--signal-tint);
+    padding: 0.55rem 0.75rem;
+    border-radius: 2px;
+}
+.chat-hint { margin-bottom: 0.2rem; }
+.prompts + [data-testid="stChatMessage"] { margin-top: 0.6rem; }
 [data-testid="stChatMessageAvatarUser"],
 [data-testid="stChatMessageAvatarAssistant"] {
     width: 1.8rem !important;
@@ -495,6 +500,7 @@ p, li, label, .stMarkdown { color: var(--ink-soft); }
 st.markdown(STYLES, unsafe_allow_html=True)
 
 BULLET = re.compile(r"^\s*(?:[-*\u2022]|\d+[.)])\s+")
+CHAT_HEIGHT = 520
 
 
 def count_items(text: str) -> int:
@@ -581,6 +587,7 @@ def load_sample_meeting() -> dict:
     return json.loads(SAMPLE_MEETING_PATH.read_text(encoding="utf-8"))
 
 
+@st.fragment
 def render_chat(locked: bool = False) -> None:
     st.markdown(
         '<div class="panel-head"><div class="mono">Follow up</div>'
@@ -612,33 +619,36 @@ def render_chat(locked: bool = False) -> None:
         return
 
     messages = st.session_state.setdefault("messages", [])
-    if not messages:
-        st.markdown(
-            '<ul class="prompts">'
-            "<li>What did we agree to ship first?</li>"
-            "<li>Who owns the follow-ups, and by when?</li>"
-            "<li>What was left unresolved?</li>"
-            "</ul>",
-            unsafe_allow_html=True,
-        )
+    history = st.container(height=CHAT_HEIGHT, border=True)
 
-    for message in messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+    with history:
+        if not messages:
+            st.markdown(
+                '<div class="mono chat-hint">Try asking</div>'
+                '<ul class="prompts">'
+                "<li>What did we agree to ship first?</li>"
+                "<li>Who owns the follow-ups, and by when?</li>"
+                "<li>What was left unresolved?</li>"
+                "</ul>",
+                unsafe_allow_html=True,
+            )
+        for message in messages:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
 
     question = st.chat_input("Ask a question about the meeting")
     if question:
-        with st.chat_message("user"):
-            st.markdown(question)
-        with st.chat_message("assistant"):
-            with st.spinner("Thinking through the transcript..."):
-                try:
-                    answer = ask_question(rag_chain, question)
-                except Exception as error:
-                    st.error(f"That question could not be answered: {error}")
-                    return
-            st.markdown(answer)
         messages.append({"role": "user", "content": question})
+        with history:
+            with st.chat_message("user"):
+                st.markdown(question)
+            with st.chat_message("assistant"):
+                with st.spinner("Reading the transcript..."):
+                    try:
+                        answer = ask_question(rag_chain, question)
+                    except Exception as error:
+                        answer = f"That question could not be answered. {error}"
+                st.markdown(answer)
         messages.append({"role": "assistant", "content": answer})
 
 

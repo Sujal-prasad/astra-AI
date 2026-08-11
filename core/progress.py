@@ -4,8 +4,8 @@ STAGE_PLAN = (
     ("downloading", "Downloading audio", 0.10),
     ("converting", "Converting audio", 0.04),
     ("chunking", "Splitting audio", 0.03),
-    ("transcribing", "Transcribing", 0.58),
-    ("analyzing", "Analyzing the meeting", 0.25),
+    ("transcribing", "Transcribing", 0.63),
+    ("analyzing", "Analyzing the meeting", 0.20),
 )
 
 STAGE_ORDER = tuple(name for name, _, _ in STAGE_PLAN)
@@ -15,6 +15,7 @@ STAGE_WEIGHT = {name: weight for name, _, weight in STAGE_PLAN}
 MEASURABLE_FRACTION = 0.04
 MEASURABLE_SECONDS = 1.5
 SMOOTHING = 0.4
+ANCHOR_MIN_UNITS = 0.12
 ETA_STAGES = frozenset({"downloading", "transcribing", "analyzing"})
 
 
@@ -81,12 +82,12 @@ class ProgressTracker:
             return None
 
         if self.unit_anchor is None:
-            if completed >= 1:
+            if completed >= ANCHOR_MIN_UNITS:
                 self.unit_anchor = (now, completed)
             return None
 
         anchor_time, anchor_units = self.unit_anchor
-        if completed <= anchor_units:
+        if completed - anchor_units < ANCHOR_MIN_UNITS:
             return None
 
         per_unit = (now - anchor_time) / (completed - anchor_units)
@@ -115,8 +116,6 @@ class ProgressTracker:
         measured = self._unit_rate_eta(event, now)
         if measured is not None:
             remaining_here, stage_total = measured
-        elif event.get("total"):
-            return self._carry(now)
         else:
             stage_elapsed = now - self.stage_started_at
             if fraction < MEASURABLE_FRACTION or stage_elapsed < MEASURABLE_SECONDS:

@@ -26,19 +26,28 @@ def load_model():
     return _model
 
 
-def transcribe_chunk(chunk_path: str, language: str = "english") -> str:
+def transcribe_chunk(chunk_path: str, language: str = "english", on_progress=None) -> str:
     model = load_model()
 
     if language.lower() == "hinglish":
-        segments, _ = model.transcribe(
+        segments, info = model.transcribe(
             chunk_path,
             task="translate",
             language=HINGLISH_SOURCE_LANGUAGE,
         )
     else:
-        segments, _ = model.transcribe(chunk_path, task="transcribe")
+        segments, info = model.transcribe(chunk_path, task="transcribe")
 
-    return " ".join(segment.text.strip() for segment in segments if segment.text.strip())
+    duration = getattr(info, "duration", 0) or 0
+    texts = []
+    for segment in segments:
+        text = segment.text.strip()
+        if text:
+            texts.append(text)
+        if on_progress and duration:
+            on_progress(min(1.0, segment.end / duration))
+
+    return " ".join(texts)
 
 
 def transcribe_all(chunks: list, language: str = "english", progress_callback=None) -> str:
@@ -49,24 +58,27 @@ def transcribe_all(chunks: list, language: str = "english", progress_callback=No
     for index, chunk in enumerate(chunks, start=1):
         if not os.path.isfile(chunk):
             raise FileNotFoundError(f"Audio chunk {index} was not found: {chunk}")
-        if progress_callback:
+        def report(position, index=index):
             progress_callback({
                 "stage": "transcribing",
                 "status": "running",
                 "current": index,
-                "completed": max(0, index - 1),
+                "completed": position,
                 "total": len(chunks),
             })
+
+        if progress_callback:
+            report(index - 1)
         try:
-            transcripts.append(transcribe_chunk(chunk, language=language))
+            transcripts.append(
+                transcribe_chunk(
+                    chunk,
+                    language=language,
+                    on_progress=(lambda f, i=index: report(i - 1 + f)) if progress_callback else None,
+                )
+            )
             if progress_callback:
-                progress_callback({
-                    "stage": "transcribing",
-                    "status": "running",
-                    "current": index,
-                    "completed": index,
-                    "total": len(chunks),
-                })
+                report(index)
         except Exception as error:
             raise RuntimeError(f"Transcription failed on audio chunk {index}: {error}") from error
 
