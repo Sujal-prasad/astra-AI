@@ -46,6 +46,26 @@ body {
     color: var(--slate);
 }
 
+.transition-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    align-items: center;
+    justify-content: center;
+    background: var(--paper);
+}
+
+.transition-overlay.active { display: flex; }
+
+.transition-card { width: min(420px, calc(100% - 3rem)); }
+.transition-bar { height: 2px; background: var(--signal); margin-bottom: 1.3rem; }
+.transition-label { color: var(--slate); }
+.transition-line { height: 0.8rem; margin-top: 0.9rem; background: linear-gradient(90deg, var(--line) 25%, var(--panel) 50%, var(--line) 75%); background-size: 200% 100%; animation: transition-shimmer 1.3s ease-in-out infinite; }
+.transition-line.short { width: 38%; }
+.transition-line.long { width: 88%; }
+@keyframes transition-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
 .login-page {
     min-height: 100vh;
     display: flex;

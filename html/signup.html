@@ -7,6 +7,14 @@
     <link rel="stylesheet" href="../css/signup.css" />
   </head>
   <body>
+    <div class="transition-overlay" id="transition-overlay" aria-live="polite">
+      <div class="transition-card">
+        <div class="transition-bar"></div>
+        <div class="transition-label mono">Opening your workspace</div>
+        <div class="transition-line short"></div>
+        <div class="transition-line long"></div>
+      </div>
+    </div>
     <main class="login-page">
       <section class="login-box" aria-labelledby="signup-title">
         <header class="login-header">
@@ -74,7 +82,12 @@
       statusMessage.textContent = message;
     }
 
+    function showTransition() {
+      document.getElementById("transition-overlay").classList.add("active");
+    }
+
     async function enterAstra(session) {
+      showTransition();
       const params = new URLSearchParams({
         access_token: session.access_token,
         refresh_token: session.refresh_token

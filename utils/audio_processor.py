@@ -26,8 +26,25 @@ def _configure_ffmpeg() -> None:
 
 _configure_ffmpeg()
 
+
+def _configure_deno() -> None:
+    if which("deno"):
+        return
+
+    winget_root = Path(os.getenv("LOCALAPPDATA", "")) / "Microsoft" / "WinGet" / "Packages"
+    if not winget_root.is_dir():
+        return
+
+    deno_path = next(winget_root.rglob("deno.exe"), None)
+    if deno_path:
+        os.environ["PATH"] = str(deno_path.parent) + os.pathsep + os.environ.get("PATH", "")
+
+
+_configure_deno()
+
 import yt_dlp
 from pydub import AudioSegment
+from yt_dlp.utils import DownloadError
 
 
 def _run_ffmpeg(arguments: list) -> None:
@@ -40,7 +57,7 @@ def _run_ffmpeg(arguments: list) -> None:
         raise RuntimeError(f"FFmpeg failed: {result.stderr.strip()}")
 
 
-def download_youtube_audio(url:str)->str:
+def download_youtube_audio(url:str, progress_callback=None)->str:
     if not which("ffmpeg"):
         raise RuntimeError(
             "FFmpeg is required for YouTube audio. Install FFmpeg and add it to PATH, "
@@ -51,6 +68,7 @@ def download_youtube_audio(url:str)->str:
     ydl_opts={
         "format":"bestaudio/best",
         "outtmpl":output_path,
+        "js_runtimes":{"deno": {}},
         "postprocessors":[
             {
                 "key": "FFmpegExtractAudio",
@@ -59,9 +77,56 @@ def download_youtube_audio(url:str)->str:
             }
         ],"quiet": True
     }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info=ydl.extract_info(url, download=True)
-        filename=Path(ydl.prepare_filename(info)).with_suffix(".wav")
+    browser = os.getenv("YOUTUBE_BROWSER", "").strip().lower()
+    if browser:
+        supported_browsers = {"chrome", "edge", "firefox", "brave", "opera", "vivaldi"}
+        if browser not in supported_browsers:
+            raise RuntimeError(
+                f"Unsupported YOUTUBE_BROWSER={browser!r}. Use chrome, edge, firefox, brave, opera, or vivaldi."
+            )
+        ydl_opts["cookiesfrombrowser"] = (browser,)
+    def run_download(options: dict) -> Path:
+        if progress_callback:
+            options["progress_hooks"] = [progress_callback]
+        with yt_dlp.YoutubeDL(options) as ydl:
+            info = ydl.extract_info(url, download=True)
+            return Path(ydl.prepare_filename(info)).with_suffix(".wav")
+
+    try:
+        if progress_callback:
+            progress_callback({"stage": "downloading", "status": "starting"})
+        filename = run_download(ydl_opts)
+    except DownloadError as error:
+        message = str(error)
+        if "cookie database" in message.lower() or "could not copy chrome" in message.lower():
+            ydl_opts.pop("cookiesfrombrowser", None)
+            try:
+                filename = run_download(ydl_opts)
+            except DownloadError as retry_error:
+                error = retry_error
+                message = str(retry_error)
+            else:
+                message = ""
+        if "decrypt with dpapi" in message.lower() or "failed to decrypt" in message.lower():
+            ydl_opts.pop("cookiesfrombrowser", None)
+            try:
+                filename = run_download(ydl_opts)
+            except DownloadError as retry_error:
+                error = retry_error
+                message = str(retry_error)
+            else:
+                message = ""
+        if "not available" in message.lower() or "private video" in message.lower():
+            raise RuntimeError(
+                "YouTube could not provide this video. Check that the URL is correct, "
+                "the video is public, and it is available in your region."
+            ) from error
+        if "403" in message or "forbidden" in message.lower():
+            raise RuntimeError(
+                "YouTube rejected the media download (HTTP 403). Add YOUTUBE_BROWSER=chrome "
+                "to .ENV, restart Astra, and retry while Chrome is installed on this computer."
+            ) from error
+        raise RuntimeError(f"YouTube download failed: {message}") from error
 
     if not filename.exists():
         raise FileNotFoundError(f"Downloaded audio was not found: {filename}")
@@ -130,20 +195,28 @@ def cleanup_files(paths)->None:
             pass
 
 
-def process_inputs(source:str)->list:
+def process_inputs(source:str, progress_callback=None)->list:
     intermediates=[]
     if source.startswith("http://") or source.startswith("https://"):
-        downloaded_path=download_youtube_audio(source)
+        downloaded_path=download_youtube_audio(source, progress_callback=progress_callback)
         intermediates.append(downloaded_path)
     else:
         downloaded_path=source
 
+    if progress_callback:
+        progress_callback({"stage": "converting", "status": "running"})
     wav_path=convert_to_wav(downloaded_path)
     intermediates.append(wav_path)
+    if progress_callback:
+        progress_callback({"stage": "converting", "status": "finished"})
 
     try:
+        if progress_callback:
+            progress_callback({"stage": "chunking", "status": "running"})
         chunks=chunk_audio(wav_path)
     finally:
         cleanup_files(intermediates)
 
+    if progress_callback:
+        progress_callback({"stage": "chunking", "status": "finished", "chunks": len(chunks)})
     return chunks

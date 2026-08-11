@@ -1,6 +1,7 @@
 import html
 import json
 import re
+import time
 import uuid
 from pathlib import Path
 from shutil import which
@@ -26,6 +27,30 @@ st.set_page_config(
     page_icon="A",
     layout="wide",
     initial_sidebar_state="expanded",
+)
+
+boot_placeholder = st.empty()
+boot_placeholder.markdown(
+        """
+        <style>
+        .astra-boot { padding: 2rem 0; }
+        .astra-boot-bar { height: 2px; width: 100%; background: #7c2f39; margin-bottom: 1.4rem; }
+        .astra-boot-label { color: #6b7684; font: 0.7rem 'IBM Plex Mono', monospace; letter-spacing: 0.12em; text-transform: uppercase; }
+        .astra-boot-line { height: 0.9rem; margin-top: 1rem; background: linear-gradient(90deg, #dfe3e7 25%, #fdfdfc 50%, #dfe3e7 75%); background-size: 200% 100%; animation: astra-boot-shimmer 1.3s ease-in-out infinite; }
+        .astra-boot-line.short { width: 36%; }
+        .astra-boot-line.medium { width: 64%; }
+        .astra-boot-line.long { width: 88%; }
+        @keyframes astra-boot-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+        </style>
+        <div class="astra-boot">
+            <div class="astra-boot-bar"></div>
+            <div class="astra-boot-label">Astra / restoring workspace</div>
+            <div class="astra-boot-line short"></div>
+            <div class="astra-boot-line long"></div>
+            <div class="astra-boot-line medium"></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
 )
 
 
@@ -105,6 +130,7 @@ def current_user_email() -> str:
 
 
 require_authentication()
+boot_placeholder.empty()
 
 STYLES = """
 <style>
@@ -256,10 +282,33 @@ p, li, label, .stMarkdown { color: var(--ink-soft); }
 }
 .stButton > button:hover, .stDownloadButton > button:hover { border-color: var(--ink); color: var(--ink); background: #fff; }
 .stFormSubmitButton > button, .stButton > button[kind="primary"] {
-    background: var(--signal); border-color: var(--signal); color: #fff; font-weight: 600;
+    background: var(--signal) !important; border-color: var(--signal) !important; color: #fff !important; font-weight: 600;
 }
 .stFormSubmitButton > button:hover, .stButton > button[kind="primary"]:hover {
-    background: var(--signal-deep); border-color: var(--signal-deep); color: #fff;
+    background: var(--signal-deep) !important; border-color: var(--signal-deep) !important; color: #fff !important;
+}
+[data-testid="stFormSubmitButton"] button,
+[data-testid="stBaseButton-primary"] {
+    background: var(--signal) !important;
+    border-color: var(--signal) !important;
+    color: #fff !important;
+}
+[data-testid="stFormSubmitButton"] button:hover,
+[data-testid="stBaseButton-primary"]:hover {
+    background: var(--signal-deep) !important;
+    border-color: var(--signal-deep) !important;
+    color: #fff !important;
+}
+.st-key-sign_out_button button {
+    background: var(--signal);
+    border-color: var(--signal);
+    color: #fff;
+    font-weight: 600;
+}
+.st-key-sign_out_button button:hover {
+    background: var(--signal-deep);
+    border-color: var(--signal-deep);
+    color: #fff;
 }
 .stTextInput input, .stTextArea textarea, [data-baseweb="select"] > div {
     border-radius: 2px !important;
@@ -268,6 +317,25 @@ p, li, label, .stMarkdown { color: var(--ink-soft); }
     font-family: 'Instrument Sans', sans-serif;
 }
 .stTextInput input:focus, [data-baseweb="select"] > div:focus-within { border-color: var(--signal) !important; box-shadow: none !important; }
+[data-testid="stSidebar"] [data-testid="stTextInput"] { margin-bottom: 0.75rem; }
+[data-testid="stSidebar"] [data-testid="stTextInput"] input {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+[data-testid="stSidebar"] [data-testid="InputInstructions"] {
+    position: static !important;
+    height: auto !important;
+    min-height: 1.1rem;
+    margin-top: 0.35rem;
+    overflow: visible !important;
+    line-height: 1.3 !important;
+}
+[data-testid="stSidebar"] [data-testid="InputInstructions"] p {
+    margin: 0;
+    white-space: normal;
+}
+[data-testid="stSidebar"] [data-testid="stFormSubmitButton"] { margin-top: 0.9rem; }
 [data-testid="stFileUploaderDropzone"] {
     background: #f6f7f8; border: 1px dashed var(--line); border-radius: 2px;
 }
@@ -298,8 +366,42 @@ p, li, label, .stMarkdown { color: var(--ink-soft); }
 .panel-head { border-top: 2px solid var(--ink); padding-top: 0.9rem; margin-bottom: 0.9rem; }
 .panel-head h3 { font-size: 1.05rem; margin: 0.45rem 0 0.35rem; }
 .panel-head p { color: var(--slate); font-size: 0.85rem; margin: 0; }
-[data-testid="stChatMessage"] { background: transparent; padding: 0.35rem 0; }
-[data-testid="stChatInput"] { border-radius: 2px; border-color: var(--line); background: var(--panel); }
+[data-testid="stChatMessage"] {
+    background: transparent;
+    padding: 0.7rem 0;
+    gap: 0.65rem;
+    border-bottom: 1px solid var(--line-soft);
+}
+[data-testid="stChatMessage"]:last-of-type { border-bottom: none; }
+[data-testid="stChatMessageAvatarUser"],
+[data-testid="stChatMessageAvatarAssistant"] {
+    width: 1.8rem !important;
+    height: 1.8rem !important;
+    min-width: 1.8rem !important;
+    border-radius: 50% !important;
+}
+[data-testid="stChatMessageAvatarUser"] svg,
+[data-testid="stChatMessageAvatarAssistant"] svg {
+    width: 1rem !important;
+    height: 1rem !important;
+}
+[data-testid="stChatMessageContent"] {
+    max-width: 42rem;
+    color: var(--ink-soft);
+    font-size: 0.92rem;
+    line-height: 1.6;
+}
+[data-testid="stChatMessageContent"] p { margin: 0; }
+[data-testid="stChatInput"] {
+    margin-top: 1rem;
+    border-radius: 2px;
+    border-color: var(--line);
+    background: var(--panel);
+}
+[data-testid="stChatInput"] textarea {
+    font-family: 'Instrument Sans', sans-serif;
+    font-size: 0.92rem;
+}
 .prompts { list-style: none; padding: 0; margin: 1.1rem 0 0; }
 .prompts li {
     font-family: 'IBM Plex Mono', monospace; font-size: 0.74rem; color: var(--slate);
@@ -311,6 +413,21 @@ p, li, label, .stMarkdown { color: var(--ink-soft); }
 .empty { border: 1px solid var(--line); background: var(--panel); padding: 2.4rem 2rem; max-width: 640px; }
 .empty h3 { margin: 0.6rem 0 0.5rem; font-size: 1.3rem; }
 .empty p { color: var(--slate); margin: 0; line-height: 1.65; }
+
+/* ---------- processing skeleton ---------- */
+.loading-shell { max-width: 760px; border-top: 2px solid var(--ink); padding-top: 1rem; }
+.loading-shell h3 { margin: 0.6rem 0 1.25rem; }
+.skeleton-line {
+    height: 0.85rem;
+    margin: 0.75rem 0;
+    background: linear-gradient(90deg, #dfe3e7 25%, #f7f7f6 50%, #dfe3e7 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+.skeleton-line.short { width: 42%; }
+.skeleton-line.medium { width: 68%; }
+.skeleton-line.long { width: 92%; }
+@keyframes skeleton-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 
 @media (max-width: 640px) {
     .masthead h1 { font-size: 2rem; }
@@ -440,7 +557,7 @@ def render_chat() -> None:
         with st.chat_message("user"):
             st.markdown(question)
         with st.chat_message("assistant"):
-            with st.spinner("Reading the transcript..."):
+            with st.spinner("Thinking through the transcript..."):
                 try:
                     answer = ask_question(rag_chain, question)
                 except Exception as error:
@@ -478,7 +595,7 @@ with st.sidebar:
         f'<div class="slug">{html.escape(current_user_email())}</div>',
         unsafe_allow_html=True,
     )
-    if st.button("Sign out", use_container_width=True):
+    if st.button("Sign out", key="sign_out_button", use_container_width=True):
         confirm_sign_out()
 
     st.markdown("---")
@@ -547,13 +664,106 @@ if submitted:
         st.session_state.language = language
         st.session_state.source_label = uploaded_file.name if uploaded_file else "YouTube"
         st.session_state.pop("messages", None)
-        with st.status("Transcribing meeting...", expanded=True) as status:
+        loading_placeholder = st.empty()
+        loading_placeholder.markdown(
+            '<div class="loading-shell">'
+            '<div class="mono">Working locally</div>'
+            '<h3>Building your meeting record...</h3>'
+            '<div class="skeleton-line short"></div>'
+            '<div class="skeleton-line long"></div>'
+            '<div class="skeleton-line medium"></div>'
+            '<div class="skeleton-line long"></div>'
+            '<div class="skeleton-line short"></div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+        pipeline_progress = st.progress(0, text="Starting meeting pipeline...")
+        progress_state = {"stage": None, "started_at": time.monotonic(), "fraction": 0.0}
+
+        def format_eta(seconds) -> str:
+            if seconds is None or seconds < 0 or seconds == float("inf"):
+                return "ETA calculating..."
+            seconds = max(1, round(seconds))
+            minutes, remaining_seconds = divmod(seconds, 60)
+            if minutes:
+                return f"about {minutes}m {remaining_seconds:02d}s remaining"
+            return f"about {remaining_seconds}s remaining"
+
+        def update_pipeline_progress(progress: dict) -> None:
+            stage = progress.get("stage", "")
+            event_status = progress.get("status", "")
+            stage_ranges = {
+                "downloading": (0.0, 0.25, "Downloading audio"),
+                "converting": (0.25, 0.35, "Converting audio to WAV"),
+                "chunking": (0.35, 0.45, "Splitting audio into chunks"),
+                "transcribing": (0.45, 0.75, "Transcribing with Whisper"),
+                "analyzing": (0.75, 1.0, "Analyzing the meeting"),
+            }
+            if stage not in stage_ranges:
+                return
+            start, end, label = stage_ranges[stage]
+            if progress_state["stage"] != stage:
+                progress_state["stage"] = stage
+
+            status_label = progress.get("message") or f"{label}..."
+            status.update(label=status_label, expanded=True)
+
+            if stage == "downloading":
+                total = progress.get("total_bytes") or progress.get("total_bytes_estimate")
+                downloaded = progress.get("downloaded_bytes", 0)
+                stage_fraction = downloaded / total if total else 0.0
+                fraction = start + (end - start) * min(1.0, stage_fraction)
+            elif stage == "transcribing" and progress.get("current"):
+                current = progress["current"]
+                total = progress.get("total", current)
+                completed = progress.get("completed", max(0, current - 1))
+                fraction = start + (end - start) * min(1.0, completed / total)
+            elif "fraction" in progress:
+                fraction = start + (end - start) * progress["fraction"]
+            elif event_status == "finished":
+                fraction = end
+            else:
+                fraction = start
+
+            fraction = max(progress_state["fraction"], min(1.0, fraction))
+            progress_state["fraction"] = fraction
+            elapsed = time.monotonic() - progress_state["started_at"]
+            eta_text = format_eta(elapsed * (1.0 - fraction) / fraction) if fraction > 0.01 else "ETA calculating..."
+
+            if stage == "downloading" and event_status == "downloading":
+                downloaded = progress.get("downloaded_bytes", 0)
+                if total:
+                    fraction = min(1.0, downloaded / total)
+                    size_mb = downloaded / 1024 / 1024
+                    total_mb = total / 1024 / 1024
+                    pipeline_progress.progress(
+                        progress_state["fraction"],
+                        text=f"{label}... {round(fraction * 100)}% ({size_mb:.1f}/{total_mb:.1f} MB) | {eta_text}",
+                    )
+                return
+
+            if stage == "transcribing" and progress.get("current"):
+                current = progress["current"]
+                total = progress.get("total", current)
+                pipeline_progress.progress(
+                    progress_state["fraction"],
+                    text=f"{label}... chunk {current} of {total} | {eta_text}",
+                )
+                return
+
+            message = progress.get("message") or f"{label}..."
+            pipeline_progress.progress(progress_state["fraction"], text=f"{message} | {eta_text}")
+
+        with st.status("Starting meeting pipeline...", expanded=True) as status:
             try:
                 st.write("Extracting audio and writing the transcript...")
-                result = run_pipeline(source, language)
+                result = run_pipeline(source, language, progress_callback=update_pipeline_progress)
                 st.session_state.result = result
+                pipeline_progress.progress(1.0, text="Meeting record ready")
+                loading_placeholder.empty()
                 status.update(label="Brief ready", state="complete", expanded=False)
             except Exception as error:
+                loading_placeholder.empty()
                 status.update(label="Transcription stopped", state="error")
                 st.error(str(error))
                 st.info(
