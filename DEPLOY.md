@@ -52,8 +52,12 @@ Environment panel tells you whether Ollama is reachable and whether your model i
 ## 4. Go public with no domain and no account
 
 ```
-python publish.py
+.\venv\Scripts\python.exe publish.py
 ```
+
+Use the venv interpreter, not the bare `python` on PATH — that one is a different 3.12 install
+without the dependencies. `publish.py` launches Streamlit with `sys.executable`, so whichever
+Python starts it is the one that runs the app.
 
 That is the whole thing. It starts Caddy, opens a Cloudflare quick tunnel, reads the URL
 Cloudflare hands back, feeds it into `ASTRA_AUTH_URL`/`ASTRA_APP_URL`, then starts the auth
