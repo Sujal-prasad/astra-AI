@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-import whisper
+from faster_whisper import WhisperModel
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".ENV")
@@ -16,7 +16,12 @@ def load_model():
     global _model
 
     if _model is None:
-        _model = whisper.load_model(WHISPER_MODEL)
+        _model = WhisperModel(
+            WHISPER_MODEL,
+            device="cpu",
+            compute_type="int8",
+            cpu_threads=max(1, (os.cpu_count() or 2) - 2),
+        )
 
     return _model
 
@@ -25,15 +30,15 @@ def transcribe_chunk(chunk_path: str, language: str = "english") -> str:
     model = load_model()
 
     if language.lower() == "hinglish":
-        result = model.transcribe(
+        segments, _ = model.transcribe(
             chunk_path,
             task="translate",
             language=HINGLISH_SOURCE_LANGUAGE,
         )
     else:
-        result = model.transcribe(chunk_path, task="transcribe")
+        segments, _ = model.transcribe(chunk_path, task="transcribe")
 
-    return result["text"]
+    return " ".join(segment.text.strip() for segment in segments if segment.text.strip())
 
 
 def transcribe_all(chunks: list, language: str = "english", progress_callback=None) -> str:

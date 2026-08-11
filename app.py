@@ -624,7 +624,7 @@ with st.sidebar:
                 help="FFmpeg is required for anything other than WAV.",
             )
         else:
-            source_url = st.text_input("YouTube URL", placeholder="https://www.youtube.com/watch?v=...")
+            source_url = st.text_input("YouTube URL", placeholder="")
         submitted = st.form_submit_button(
             "Transcribe meeting", type="primary", use_container_width=True
         )

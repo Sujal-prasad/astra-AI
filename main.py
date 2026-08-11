@@ -6,8 +6,7 @@ load_dotenv(Path(__file__).resolve().parent / ".ENV")
 
 from utils.audio_processor import process_inputs, cleanup_files
 from core.transcriber import transcribe_all
-from core.summarise import summarize , generate_title
-from core.extractor import extract_action_items , extract_key_decisions, extract_questions
+from core.meeting_analysis import analyze_transcript
 from core.rag_engine import build_rag_chain, ask_question
 
 def run_pipeline(source:str, language:str='english', progress_callback=None)->dict:
@@ -24,30 +23,18 @@ def run_pipeline(source:str, language:str='english', progress_callback=None)->di
         )
 
     if progress_callback:
-        progress_callback({"stage": "analyzing", "status": "running", "fraction": 0.0, "message": "Generating meeting title..."})
-    title=generate_title(transcript, progress_callback=progress_callback)
-    if progress_callback:
-        progress_callback({"stage": "analyzing", "status": "running", "fraction": 0.25, "message": "Writing summary..."})
-    summary=summarize(transcript, progress_callback=progress_callback)
-    if progress_callback:
-        progress_callback({"stage": "analyzing", "status": "running", "fraction": 0.5, "message": "Extracting action items and decisions..."})
-    action_item=extract_action_items(transcript, progress_callback=progress_callback)
-    if progress_callback:
-        progress_callback({"stage": "analyzing", "status": "running", "fraction": 0.7, "message": "Extracting key decisions..."})
-    key_decision=extract_key_decisions(transcript, progress_callback=progress_callback)
-    if progress_callback:
-        progress_callback({"stage": "analyzing", "status": "running", "fraction": 0.85, "message": "Checking open questions..."})
-    questions=extract_questions(transcript, progress_callback=progress_callback)
+        progress_callback({"stage": "analyzing", "status": "running", "fraction": 0.0, "message": "Analyzing the meeting in one pass..."})
+    analysis = analyze_transcript(transcript, progress_callback=progress_callback)
     rag_chain=build_rag_chain(transcript)
     if progress_callback:
         progress_callback({"stage": "analyzing", "status": "finished", "fraction": 1.0, "message": "Meeting record ready"})
     return {
-        "title": title,
+        "title": analysis["title"],
         "transcript": transcript,
-        "summary": summary,
-        "action_items": action_item,
-        "key_decisions": key_decision,
-        "open_questions": questions,
+        "summary": analysis["summary"],
+        "action_items": analysis["action_items"],
+        "key_decisions": analysis["key_decisions"],
+        "open_questions": analysis["open_questions"],
         "rag_chain": rag_chain,
     }
 
