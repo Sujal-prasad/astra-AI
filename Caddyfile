@@ -1,0 +1,26 @@
+{
+	admin off
+	auto_https off
+}
+
+:8080 {
+	handle /html/* {
+		reverse_proxy 127.0.0.1:8001
+	}
+
+	handle /css/* {
+		reverse_proxy 127.0.0.1:8001
+	}
+
+	handle /assets/* {
+		reverse_proxy 127.0.0.1:8001
+	}
+
+	handle /auth-config.js {
+		reverse_proxy 127.0.0.1:8001
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:8501
+	}
+}

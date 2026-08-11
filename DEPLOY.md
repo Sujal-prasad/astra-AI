@@ -49,7 +49,44 @@ python run.py
 This starts the auth server, starts Streamlit headless, and opens the login page. The sidebar
 Environment panel tells you whether Ollama is reachable and whether your model is pulled.
 
-## 4. Expose it to the internet with Cloudflare Tunnel
+## 4. Go public with no domain and no account
+
+```
+python publish.py
+```
+
+That is the whole thing. It starts Caddy, opens a Cloudflare quick tunnel, reads the URL
+Cloudflare hands back, feeds it into `ASTRA_AUTH_URL`/`ASTRA_APP_URL`, then starts the auth
+server and Streamlit behind it. It prints the live URL and takes everything down on Ctrl+C.
+
+Prerequisites, both free and already installed on this machine:
+
+```
+winget install CaddyServer.Caddy
+winget install Cloudflare.cloudflared
+```
+
+### Why Caddy is in the picture
+
+Astra runs two servers — auth pages on 8001, workspace on 8501 — but a free tunnel gives you
+exactly one URL. `Caddyfile` merges them onto port 8080: `/html/*`, `/css/*`, `/assets/*` and
+`/auth-config.js` go to the auth server, everything else goes to Streamlit. Caddy also upgrades
+the WebSocket that Streamlit's `/_stcore/stream` needs, which a naive proxy would drop.
+
+### What you give up
+
+The quick-tunnel URL is random and **changes every restart**. `publish.py` handles that for
+Astra itself, but not for Supabase:
+
+- **`/?demo=1` works immediately.** No auth, no configuration. This is the link to send.
+- **Email and password sign-in works immediately.** Supabase does not check the origin for it.
+- **Google sign-in does not**, until you add the current URL to Supabase redirect URLs — and
+  it breaks again on the next restart.
+
+For a URL that survives restarts you need a named tunnel, which needs a domain on Cloudflare.
+Section 5 covers that; until then, lead recruiters to the demo link.
+
+## 5. A permanent URL, once you have a domain
 
 Inference stays on this machine; the tunnel only carries HTTP. No port forwarding, no firewall
 holes, no static IP, no exposed home address — your machine makes an outbound connection only,
@@ -120,7 +157,7 @@ Encrypt certificate, and add dynamic DNS if your ISP rotates your IP. The costs:
 becomes public, you own TLS renewal, and you take internet background scanning directly. Do
 not skip the reverse proxy and expose 8501 raw — Streamlit is not built to be an edge server.
 
-## 5. Point Supabase at the public URL
+## 6. Point Supabase at the public URL
 
 In the Supabase dashboard, **Authentication → URL Configuration**:
 
@@ -134,7 +171,7 @@ those entries exist. Without them Supabase rejects the OAuth callback.
 Also turn **email confirmation on** before going public, or anyone can create an account with
 an address they do not own.
 
-## 6. Keep it running
+## 7. Keep it running
 
 The link is only as good as this machine's uptime. Four things to set:
 
@@ -163,7 +200,7 @@ cloudflared service install
 **Let Ollama autostart.** The desktop app does this by default; confirm it survives a reboot
 with `curl http://localhost:11434/api/tags`.
 
-## 7. Capacity and abuse
+## 8. Capacity and abuse
 
 Everything runs in one process on one machine, so be realistic:
 
