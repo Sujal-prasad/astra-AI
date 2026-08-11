@@ -18,7 +18,7 @@ import auth_server
 from core.llm import OLLAMA_BASE_URL, OLLAMA_MODEL, installed_models
 from core.rag_engine import ask_question
 from core.transcriber import WHISPER_MODEL
-from main import run_pipeline
+from main import print_progress, run_pipeline
 from utils.audio_processor import cleanup_files
 from utils.superbase_client import create_supabase_client
 
@@ -299,16 +299,26 @@ p, li, label, .stMarkdown { color: var(--ink-soft); }
     border-color: var(--signal-deep) !important;
     color: #fff !important;
 }
+[data-testid="stFormSubmitButton"] button,
+[data-testid="stFormSubmitButton"] button *,
+[data-testid="stBaseButton-primary"],
+[data-testid="stBaseButton-primary"] * {
+    color: #fff !important;
+}
 .st-key-sign_out_button button {
-    background: var(--signal);
-    border-color: var(--signal);
-    color: #fff;
+    background: var(--signal) !important;
+    border-color: var(--signal) !important;
+    color: #fff !important;
     font-weight: 600;
 }
 .st-key-sign_out_button button:hover {
-    background: var(--signal-deep);
-    border-color: var(--signal-deep);
-    color: #fff;
+    background: var(--signal-deep) !important;
+    border-color: var(--signal-deep) !important;
+    color: #fff !important;
+}
+.st-key-sign_out_button button,
+.st-key-sign_out_button button * {
+    color: #fff !important;
 }
 .stTextInput input, .stTextArea textarea, [data-baseweb="select"] > div {
     border-radius: 2px !important;
@@ -679,6 +689,7 @@ if submitted:
         )
         pipeline_progress = st.progress(0, text="Starting meeting pipeline...")
         progress_state = {"stage": None, "started_at": time.monotonic(), "fraction": 0.0}
+        analysis_token_target = 256
 
         def format_eta(seconds) -> str:
             if seconds is None or seconds < 0 or seconds == float("inf"):
@@ -690,6 +701,7 @@ if submitted:
             return f"about {remaining_seconds}s remaining"
 
         def update_pipeline_progress(progress: dict) -> None:
+            print_progress(progress)
             stage = progress.get("stage", "")
             event_status = progress.get("status", "")
             stage_ranges = {
@@ -718,6 +730,9 @@ if submitted:
                 total = progress.get("total", current)
                 completed = progress.get("completed", max(0, current - 1))
                 fraction = start + (end - start) * min(1.0, completed / total)
+            elif stage == "analyzing" and progress.get("tokens"):
+                token_fraction = min(0.9, progress["tokens"] / analysis_token_target)
+                fraction = start + (end - start) * token_fraction
             elif "fraction" in progress:
                 fraction = start + (end - start) * progress["fraction"]
             elif event_status == "finished":

@@ -69,10 +69,27 @@ def is_retryable(error: Exception) -> bool:
     return any(fragment in message for fragment in RETRYABLE_TEXT)
 
 
-def invoke_with_retry(chain, payload):
+def invoke_with_retry(chain, payload, progress_callback=None):
     for attempt in range(MAX_ATTEMPTS):
         try:
-            return chain.invoke(payload)
+            if progress_callback is None:
+                return chain.invoke(payload)
+
+            parts = []
+            token_count = 0
+            for chunk in chain.stream(payload):
+                content = getattr(chunk, "content", chunk)
+                if isinstance(content, str):
+                    parts.append(content)
+                    token_count += 1
+                if token_count % 4 == 0:
+                    progress_callback({
+                        "stage": "analyzing",
+                        "status": "streaming",
+                        "tokens": token_count,
+                        "message": f"Generating response... {token_count} tokens",
+                    })
+            return "".join(parts)
         except Exception as error:
             if is_connection_error(error):
                 raise OllamaUnavailable(
@@ -91,16 +108,23 @@ def build_chain(system_prompt: str, temperature: float = 0.3):
     return prompt | get_llm(temperature) | StrOutputParser()
 
 
-def map_reduce(transcript: str, map_prompt: str, reduce_prompt: str, temperature: float = 0.3) -> str:
+def map_reduce(transcript: str, map_prompt: str, reduce_prompt: str, temperature: float = 0.3, progress_callback=None) -> str:
     chunks = split_transcript(transcript)
     if not chunks:
         return ""
 
     map_chain = build_chain(map_prompt, temperature)
-    partials = [invoke_with_retry(map_chain, {"text": chunk}) for chunk in chunks]
+    partials = [
+        invoke_with_retry(map_chain, {"text": chunk}, progress_callback=progress_callback)
+        for chunk in chunks
+    ]
 
     if len(partials) == 1:
         return partials[0]
 
     reduce_chain = build_chain(reduce_prompt, temperature)
-    return invoke_with_retry(reduce_chain, {"text": "\n\n".join(partials)})
+    return invoke_with_retry(
+        reduce_chain,
+        {"text": "\n\n".join(partials)},
+        progress_callback=progress_callback,
+    )

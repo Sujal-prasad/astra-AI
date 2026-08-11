@@ -43,13 +43,13 @@ QUESTION_REDUCE_PROMPT = (
 )
 
 
-def extract_action_items(transcript: str) -> str:
-    return map_reduce(transcript, ACTION_MAP_PROMPT, ACTION_REDUCE_PROMPT, TEMPERATURE)
+def extract_action_items(transcript: str, progress_callback=None) -> str:
+    return map_reduce(transcript, ACTION_MAP_PROMPT, ACTION_REDUCE_PROMPT, TEMPERATURE, progress_callback)
 
 
-def extract_key_decisions(transcript: str) -> str:
-    return map_reduce(transcript, DECISION_MAP_PROMPT, DECISION_REDUCE_PROMPT, TEMPERATURE)
+def extract_key_decisions(transcript: str, progress_callback=None) -> str:
+    return map_reduce(transcript, DECISION_MAP_PROMPT, DECISION_REDUCE_PROMPT, TEMPERATURE, progress_callback)
 
 
-def extract_questions(transcript: str) -> str:
-    return map_reduce(transcript, QUESTION_MAP_PROMPT, QUESTION_REDUCE_PROMPT, TEMPERATURE)
+def extract_questions(transcript: str, progress_callback=None) -> str:
+    return map_reduce(transcript, QUESTION_MAP_PROMPT, QUESTION_REDUCE_PROMPT, TEMPERATURE, progress_callback)

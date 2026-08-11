@@ -25,19 +25,19 @@ def run_pipeline(source:str, language:str='english', progress_callback=None)->di
 
     if progress_callback:
         progress_callback({"stage": "analyzing", "status": "running", "fraction": 0.0, "message": "Generating meeting title..."})
-    title=generate_title(transcript)
+    title=generate_title(transcript, progress_callback=progress_callback)
     if progress_callback:
         progress_callback({"stage": "analyzing", "status": "running", "fraction": 0.25, "message": "Writing summary..."})
-    summary=summarize(transcript)
+    summary=summarize(transcript, progress_callback=progress_callback)
     if progress_callback:
         progress_callback({"stage": "analyzing", "status": "running", "fraction": 0.5, "message": "Extracting action items and decisions..."})
-    action_item=extract_action_items(transcript)
+    action_item=extract_action_items(transcript, progress_callback=progress_callback)
     if progress_callback:
         progress_callback({"stage": "analyzing", "status": "running", "fraction": 0.7, "message": "Extracting key decisions..."})
-    key_decision=extract_key_decisions(transcript)
+    key_decision=extract_key_decisions(transcript, progress_callback=progress_callback)
     if progress_callback:
         progress_callback({"stage": "analyzing", "status": "running", "fraction": 0.85, "message": "Checking open questions..."})
-    questions=extract_questions(transcript)
+    questions=extract_questions(transcript, progress_callback=progress_callback)
     rag_chain=build_rag_chain(transcript)
     if progress_callback:
         progress_callback({"stage": "analyzing", "status": "finished", "fraction": 1.0, "message": "Meeting record ready"})
@@ -53,25 +53,54 @@ def run_pipeline(source:str, language:str='english', progress_callback=None)->di
 
 
 def print_progress(progress: dict) -> None:
-    stage = progress.get("stage", "").capitalize()
+    stage_key = progress.get("stage", "")
+    stage = stage_key.capitalize()
     event_status = progress.get("status", "")
     message = progress.get("message")
+    stage_ranges = {
+        "downloading": (0.0, 0.25, "Downloading audio"),
+        "converting": (0.25, 0.35, "Converting audio to WAV"),
+        "chunking": (0.35, 0.45, "Splitting audio into chunks"),
+        "transcribing": (0.45, 0.75, "Transcribing with Whisper"),
+        "analyzing": (0.75, 1.0, "Analyzing the meeting"),
+    }
+    start, end, label = stage_ranges.get(stage_key, (0.0, 0.0, stage))
     if stage == "Downloading" and event_status == "downloading":
         total = progress.get("total_bytes") or progress.get("total_bytes_estimate")
         downloaded = progress.get("downloaded_bytes", 0)
         if total:
-            print(f"\rDownloading audio... {downloaded / total:.0%}", end="", flush=True)
+            fraction = min(1.0, downloaded / total)
+            overall = start + (end - start) * fraction
+            print(f"\r[{overall:6.1%}] {label}... {fraction:.0%}", end="", flush=True)
         return
     if stage == "Transcribing" and progress.get("current"):
+        current = progress["current"]
+        total = progress.get("total", current)
+        completed = progress.get("completed", max(0, current - 1))
+        overall = start + (end - start) * min(1.0, completed / total)
         print(
-            f"Transcribing with Whisper... chunk {progress['current']} of {progress.get('total', '?')}",
+            f"[{overall:6.1%}] {label}... chunk {current} of {total}",
             flush=True,
         )
         return
+    if "fraction" in progress:
+        overall = start + (end - start) * progress["fraction"]
+        clean_message = (message or label).rstrip(". ")
+        print(f"[{overall:6.1%}] {clean_message}...", flush=True)
+        return
+    if stage == "Analyzing" and progress.get("tokens"):
+        token_fraction = min(0.9, progress["tokens"] / 256)
+        overall = start + (end - start) * token_fraction
+        clean_message = (message or label).rstrip(". ")
+        print(f"[{overall:6.1%}] {clean_message}...", flush=True)
+        return
+    if event_status == "finished":
+        print(f"[{end:6.1%}] {message or label}", flush=True)
+        return
     if message:
-        print(message, flush=True)
+        print(f"[{start:6.1%}] {message}", flush=True)
     elif event_status == "running":
-        print(f"{stage}...", flush=True)
+        print(f"[{start:6.1%}] {label}...", flush=True)
 
 
 if __name__ == "__main__":

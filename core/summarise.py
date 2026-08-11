@@ -16,11 +16,21 @@ TITLE_PROMPT = (
 )
 
 
-def summarize(transcript: str) -> str:
-    return map_reduce(transcript, SUMMARY_MAP_PROMPT, SUMMARY_REDUCE_PROMPT, TEMPERATURE)
+def summarize(transcript: str, progress_callback=None) -> str:
+    return map_reduce(
+        transcript,
+        SUMMARY_MAP_PROMPT,
+        SUMMARY_REDUCE_PROMPT,
+        TEMPERATURE,
+        progress_callback=progress_callback,
+    )
 
 
-def generate_title(transcript: str) -> str:
+def generate_title(transcript: str, progress_callback=None) -> str:
     chain = build_chain(TITLE_PROMPT, TEMPERATURE)
-    title = invoke_with_retry(chain, {"text": transcript[:TITLE_INPUT_LIMIT]})
+    title = invoke_with_retry(
+        chain,
+        {"text": transcript[:TITLE_INPUT_LIMIT]},
+        progress_callback=progress_callback,
+    )
     return title.strip().strip('"').strip()
