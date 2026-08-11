@@ -4,8 +4,8 @@ from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from core.llm import get_llm, invoke_with_retry
 from core.vector_stores import build_vector_store, load_vector_store, get_retriever
 
-WHOLE_TRANSCRIPT_LIMIT = 12000
-RETRIEVED_CHUNKS = 8
+WHOLE_TRANSCRIPT_LIMIT = 24000
+RETRIEVED_CHUNKS = 12
 
 SYSTEM_PROMPT = """You are an expert meeting assistant. Answer the user's question
 based ONLY on the meeting transcript context provided below.

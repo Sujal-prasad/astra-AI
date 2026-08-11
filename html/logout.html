@@ -20,21 +20,40 @@
       </div>
     </div>
   </body>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../auth-config.js"></script>
   <script>
-    (async () => {
-      try {
-        const supabaseClient = window.supabase.createClient(
-          window.ASTRA_SUPABASE_URL,
-          window.ASTRA_SUPABASE_ANON_KEY
-        );
-        await supabaseClient.auth.signOut();
-      } catch (error) {
-        document.getElementById("logout-status").textContent = error.message;
-      } finally {
-        window.location.replace("login.html?signedout=1");
+    (function () {
+      let accessToken = null;
+
+      for (const store of [window.localStorage, window.sessionStorage]) {
+        for (const key of Object.keys(store)) {
+          if (!key.startsWith("sb-") || !key.includes("auth-token")) continue;
+          try {
+            const stored = JSON.parse(store.getItem(key));
+            if (stored && stored.access_token) accessToken = stored.access_token;
+          } catch (error) {
+            accessToken = accessToken;
+          }
+          store.removeItem(key);
+        }
       }
+
+      if (accessToken && window.ASTRA_SUPABASE_URL) {
+        try {
+          fetch(window.ASTRA_SUPABASE_URL + "/auth/v1/logout?scope=global", {
+            method: "POST",
+            keepalive: true,
+            headers: {
+              apikey: window.ASTRA_SUPABASE_ANON_KEY,
+              Authorization: "Bearer " + accessToken
+            }
+          });
+        } catch (error) {
+          accessToken = null;
+        }
+      }
+
+      window.location.replace("login.html?signedout=1");
     })();
   </script>
 </html>

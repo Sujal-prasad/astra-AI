@@ -14,10 +14,10 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".ENV")
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
-NUM_CTX = int(os.getenv("OLLAMA_NUM_CTX", "8192"))
+NUM_CTX = int(os.getenv("OLLAMA_NUM_CTX", "16384"))
 
-CHUNK_SIZE = 3000
-CHUNK_OVERLAP = 200
+CHUNK_SIZE = 6000
+CHUNK_OVERLAP = 300
 MAX_ATTEMPTS = 4
 BASE_DELAY = 2.0
 

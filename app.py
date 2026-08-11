@@ -184,12 +184,6 @@ def require_authentication() -> None:
 
 
 def sign_out() -> None:
-    client = st.session_state.get("supabase")
-    if client is not None:
-        try:
-            client.auth.sign_out()
-        except Exception:
-            pass
     st.session_state.clear()
     st.session_state.pending_redirect = auth_server.LOGOUT_URL
     st.rerun()

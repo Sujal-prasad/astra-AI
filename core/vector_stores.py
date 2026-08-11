@@ -10,8 +10,8 @@ from langchain_core.documents import Document
 CHROMA_DIR = str(Path(__file__).resolve().parents[1] / "vector_db")
 COLLECTION_NAME = "meeting_transcripts"
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-CHUNK_SIZE = 1400
-CHUNK_OVERLAP = 200
+CHUNK_SIZE = 1800
+CHUNK_OVERLAP = 250
 
 def get_embeddings():
     return HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL, model_kwargs={"device": "cpu"})

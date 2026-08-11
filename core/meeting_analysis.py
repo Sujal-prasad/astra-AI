@@ -3,6 +3,7 @@ import json
 from core.llm import build_chain, invoke_with_retry, split_transcript
 
 TEMPERATURE = 0.2
+REDUCE_BATCH = 6
 
 ANALYSIS_MAP_PROMPT = """Analyze the portion of a meeting transcript given by the user.
 Return ONLY valid JSON with exactly these keys:
@@ -55,6 +56,57 @@ def _parse_result(raw: str) -> dict:
     return result
 
 
+def _merge_partials(partials: list) -> dict:
+    merged = DEFAULT_RESULT.copy()
+    merged["title"] = next(
+        (p["title"] for p in partials if p.get("title") and p["title"] != DEFAULT_RESULT["title"]),
+        DEFAULT_RESULT["title"],
+    )
+    for key in ("summary", "action_items", "key_decisions", "open_questions"):
+        collected = []
+        for partial in partials:
+            for item in partial.get(key, []):
+                if item not in collected:
+                    collected.append(item)
+        merged[key] = collected
+    return merged
+
+
+def _reduce_batch(reduce_chain, batch: list, progress_callback) -> dict:
+    raw = invoke_with_retry(
+        reduce_chain,
+        {"text": json.dumps(batch, ensure_ascii=True)},
+        progress_callback=progress_callback,
+    )
+    try:
+        return _parse_result(raw)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return _merge_partials(batch)
+
+
+def _reduce_all(partials: list, progress_callback=None) -> dict:
+    if len(partials) == 1:
+        return partials[0]
+
+    reduce_chain = build_chain(ANALYSIS_REDUCE_PROMPT, TEMPERATURE)
+    level = partials
+
+    while len(level) > 1:
+        if progress_callback:
+            progress_callback({
+                "stage": "analyzing",
+                "status": "running",
+                "message": f"Merging {len(level)} analysed sections",
+            })
+        batches = [level[i:i + REDUCE_BATCH] for i in range(0, len(level), REDUCE_BATCH)]
+        level = [
+            batch[0] if len(batch) == 1 else _reduce_batch(reduce_chain, batch, progress_callback)
+            for batch in batches
+        ]
+
+    return level[0]
+
+
 def _as_text(result: dict, key: str, empty_message: str) -> str:
     values = result.get(key, [])
     return "\n".join(f"{index}. {value}" for index, value in enumerate(values, start=1)) or empty_message
@@ -92,19 +144,7 @@ def analyze_transcript(transcript: str, progress_callback=None) -> dict:
                 "message": f"Analyzed transcript section {index} of {len(chunks)}",
             })
 
-    if len(partials) == 1:
-        result = partials[0]
-    else:
-        reduce_chain = build_chain(ANALYSIS_REDUCE_PROMPT, TEMPERATURE)
-        raw = invoke_with_retry(
-            reduce_chain,
-            {"text": json.dumps(partials, ensure_ascii=True)},
-            progress_callback=progress_callback,
-        )
-        try:
-            result = _parse_result(raw)
-        except (json.JSONDecodeError, TypeError, ValueError):
-            result = partials[0]
+    result = _reduce_all(partials, progress_callback)
 
     return {
         "title": result["title"],
