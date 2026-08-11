@@ -4,36 +4,28 @@ from core.llm import build_chain, invoke_with_retry, split_transcript
 
 TEMPERATURE = 0.2
 
-ANALYSIS_MAP_PROMPT = """
-Analyze this portion of a meeting transcript. Return ONLY valid JSON with exactly these keys:
-{
+ANALYSIS_MAP_PROMPT = """Analyze the portion of a meeting transcript given by the user.
+Return ONLY valid JSON with exactly these keys:
+{{
   "title": "short title, max 8 words",
   "summary": ["concise bullet", "concise bullet"],
   "action_items": ["task, owner, deadline if present"],
   "key_decisions": ["decision"],
   "open_questions": ["unresolved question or follow-up"]
-}
-Use empty arrays when a category is not present. Do not invent information.
+}}
+Use empty arrays when a category is not present. Do not invent information."""
 
-Transcript portion:
-{text}
-"""
-
-ANALYSIS_REDUCE_PROMPT = """
-Combine the following JSON analyses from consecutive portions of one meeting.
+ANALYSIS_REDUCE_PROMPT = """Combine the JSON analyses given by the user. They come from
+consecutive portions of one meeting.
 Return ONLY valid JSON with exactly these keys:
-{
+{{
   "title": "short professional title, max 8 words",
   "summary": ["final concise bullet points"],
   "action_items": ["task, owner, deadline if present"],
   "key_decisions": ["final decisions"],
   "open_questions": ["unresolved questions and follow-ups"]
-}
-Remove duplicates, preserve important details, and do not invent information.
-
-Partial analyses:
-{text}
-"""
+}}
+Remove duplicates, preserve important details, and do not invent information."""
 
 DEFAULT_RESULT = {
     "title": "Untitled meeting",

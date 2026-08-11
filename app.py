@@ -2,7 +2,6 @@ import html
 import json
 import os
 import re
-import time
 import uuid
 from pathlib import Path
 from shutil import which
@@ -24,6 +23,7 @@ ALLOWED_EMAILS = {
 
 import auth_server
 from core.llm import OLLAMA_BASE_URL, OLLAMA_MODEL, installed_models
+from core.progress import ProgressTracker, format_eta
 from core.rag_engine import ask_question
 from core.transcriber import WHISPER_MODEL
 from main import print_progress, run_pipeline
@@ -779,86 +779,23 @@ if submitted:
         st.session_state.language = language
         st.session_state.source_label = uploaded_file.name if uploaded_file else "YouTube"
         st.session_state.pop("messages", None)
-        progress_state = {"stage": None, "started_at": time.monotonic(), "fraction": 0.0}
-        analysis_token_target = 256
-
-        def format_eta(seconds) -> str:
-            if seconds is None or seconds < 0 or seconds == float("inf"):
-                return "ETA calculating..."
-            seconds = max(1, round(seconds))
-            minutes, remaining_seconds = divmod(seconds, 60)
-            if minutes:
-                return f"about {minutes}m {remaining_seconds:02d}s remaining"
-            return f"about {remaining_seconds}s remaining"
+        tracker = ProgressTracker(skip_download=uploaded_file is not None)
 
         def update_pipeline_progress(progress: dict) -> None:
             print_progress(progress)
-            stage = progress.get("stage", "")
-            event_status = progress.get("status", "")
-            stage_ranges = {
-                "downloading": (0.0, 0.25, "Downloading audio"),
-                "converting": (0.25, 0.35, "Converting audio to WAV"),
-                "chunking": (0.35, 0.45, "Splitting audio into chunks"),
-                "transcribing": (0.45, 0.75, "Transcribing with Whisper"),
-                "analyzing": (0.75, 1.0, "Analyzing the meeting"),
-            }
-            if stage not in stage_ranges:
-                return
-            start, end, label = stage_ranges[stage]
-            if progress_state["stage"] != stage:
-                progress_state["stage"] = stage
-
-            status_label = progress.get("message") or f"{label}..."
-            status.update(label=status_label, expanded=True)
-
-            if stage == "downloading":
-                total = progress.get("total_bytes") or progress.get("total_bytes_estimate")
-                downloaded = progress.get("downloaded_bytes", 0)
-                stage_fraction = downloaded / total if total else 0.0
-                fraction = start + (end - start) * min(1.0, stage_fraction)
-            elif stage == "transcribing" and progress.get("current"):
-                current = progress["current"]
-                total = progress.get("total", current)
-                completed = progress.get("completed", max(0, current - 1))
-                fraction = start + (end - start) * min(1.0, completed / total)
-            elif stage == "analyzing" and progress.get("tokens"):
-                token_fraction = min(0.9, progress["tokens"] / analysis_token_target)
-                fraction = start + (end - start) * token_fraction
-            elif "fraction" in progress:
-                fraction = start + (end - start) * progress["fraction"]
-            elif event_status == "finished":
-                fraction = end
-            else:
-                fraction = start
-
-            fraction = max(progress_state["fraction"], min(1.0, fraction))
-            progress_state["fraction"] = fraction
-            elapsed = time.monotonic() - progress_state["started_at"]
-            eta_text = format_eta(elapsed * (1.0 - fraction) / fraction) if fraction > 0.01 else "ETA calculating..."
-
-            if stage == "downloading" and event_status == "downloading":
-                downloaded = progress.get("downloaded_bytes", 0)
-                if total:
-                    fraction = min(1.0, downloaded / total)
-                    size_mb = downloaded / 1024 / 1024
-                    total_mb = total / 1024 / 1024
-                    pipeline_progress.progress(
-                        progress_state["fraction"],
-                        text=f"{label}... {round(fraction * 100)}% ({size_mb:.1f}/{total_mb:.1f} MB) | {eta_text}",
-                    )
+            reading = tracker.update(progress)
+            if reading is None:
                 return
 
-            if stage == "transcribing" and progress.get("current"):
-                current = progress["current"]
-                total = progress.get("total", current)
-                pipeline_progress.progress(
-                    progress_state["fraction"],
-                    text=f"{label}... chunk {current} of {total} | {eta_text}",
-                )
-                return
+            fraction, label, eta = reading
+            detail = tracker.detail(progress)
+            headline = f"{label} · {detail}" if detail else label
 
-            message = progress.get("message") or f"{label}..."
-            pipeline_progress.progress(progress_state["fraction"], text=f"{message} | {eta_text}")
+            status.update(label=headline, expanded=True)
+            pipeline_progress.progress(
+                fraction,
+                text=f"{headline} — {round(fraction * 100)}% · {format_eta(eta)}",
+            )
 
         with st.status("Building your meeting record...", expanded=True) as status:
             pipeline_progress = st.progress(0.0, text="Starting meeting pipeline...")
